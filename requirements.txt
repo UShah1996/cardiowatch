@@ -1,0 +1,37 @@
+# ── Core Data & ML ───────────────────────────────────────
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+imbalanced-learn==0.12.3       # SMOTE for class imbalance
+xgboost==2.0.3
+
+# ── Deep Learning (ECG / CNN-LSTM) ───────────────────────
+torch==2.3.0
+torchvision==0.18.0
+
+# ── Signal Processing ────────────────────────────────────
+scipy==1.13.0                  # Band-pass filtering
+wfdb==4.1.2                    # PhysioNet ECG record reading
+neurokit2==0.2.9               # ECG feature extraction
+
+# ── Interpretability ─────────────────────────────────────
+shap==0.45.1
+
+# ── Dashboard ────────────────────────────────────────────
+streamlit==1.35.0
+plotly==5.22.0
+altair==5.3.0
+
+# ── Experiment Tracking ──────────────────────────────────
+mlflow==2.13.0
+
+# ── Notebook & EDA ───────────────────────────────────────
+jupyter==1.0.0
+matplotlib==3.9.0
+seaborn==0.13.2
+
+# ── Utilities ────────────────────────────────────────────
+pyyaml==6.0.1
+tqdm==4.66.4
+kaggle==1.6.14                 # Kaggle API for dataset download
+requests==2.32.2
