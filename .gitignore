@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.py[cod]
+data/raw/
+data/processed/
+*.csv
+*.h5
+*.pkl
+*.pt
+*.pth
+*.dat
+*.hea
+.env
+kaggle.json
+.DS_Store
+mlruns/
