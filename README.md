@@ -13,7 +13,7 @@
 
 CardioWatch is an ML research project that explores whether **temporal patterns in cardiovascular data** can be used for the early detection of heart disease. Rather than predicting *whether* a patient has heart disease, this system aims to estimate **when** a cardiac event might be approaching — providing an early warning window to improve treatment outcomes.
 
-The system combines structured clinical data with ECG time-series signals, processed through a multi-modal pipeline (Random Forest + CNN-LSTM), and surfaced through an Apple Watch-style Streamlit risk dashboard with SHAP explainability.
+The system combines structured clinical data with ECG time-series signals, processed through a multi-modal pipeline (Random Forest + CNN-LSTM), and surfaced through an Apple Watch-style Streamlit risk dashboard with SHAP explainability. The project is built around the Lead I ECG signal that Apple Watch already records — making real-world wearable deployment a realistic future step.
 
 ---
 
@@ -22,7 +22,7 @@ The system combines structured clinical data with ECG time-series signals, proce
 ```
 cardiowatch/
 ├── data/
-│   ├── raw/               # Downloaded datasets (gitignored)
+│   ├── raw/               # Downloaded datasets (gitignored — see Data Setup below)
 │   ├── processed/         # Cleaned, windowed data (gitignored)
 │   └── simulated/         # Synthetic HealthKit streams (gitignored)
 ├── src/
@@ -57,7 +57,9 @@ cardiowatch/
 | Dataset | Source | Size | Purpose |
 |---|---|---|---|
 | Heart Failure Prediction | [Kaggle](https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction) | 918 samples, 11 features | Baseline risk modeling |
-| PhysioNet Challenge 2020 (CPSC subset) | [PhysioNet](https://physionet.org/content/challenge-2020/) | 6,877 ECG recordings | CNN-LSTM temporal modeling |
+| PhysioNet Challenge 2020 (CPSC subset) | [Kaggle mirror](https://www.kaggle.com/datasets/gamalasran/physionet-challenge-2020) | 6,877 ECG recordings | CNN-LSTM temporal modeling |
+
+> **Note:** Raw data files are excluded from this repository (gitignored). See the [Data Setup](#data-setup) section below for download instructions.
 
 ---
 
@@ -66,125 +68,154 @@ cardiowatch/
 | Model | Input | Status | Key Results |
 |---|---|---|---|
 | Random Forest | Clinical features (19) | ✅ Complete | Recall 0.887, AUC-ROC 0.938 |
-| XGBoost | Clinical features (19) | 🔲 Planned | — |
+| XGBoost | Clinical features (19) | 🔲 Planned — Week 7 | — |
 | CNN-LSTM | ECG time-series (150,000 samples/window) | ✅ Architecture complete | Output: torch.Size([4,1]), 254k params |
-
----
-
-## ✅ What Is Built (Weeks 1–6b, as of Mar 30 2026)
-
-### Weeks 1–2: Environment & Setup
-- Python 3.9 virtual environment with all dependencies installed (`torch`, `sklearn`, `wfdb`, `shap`, `streamlit`, `plotly`, etc.)
-- GitHub repo initialized and connected: [github.com/UShah1996/cardiowatch](https://github.com/UShah1996/cardiowatch)
-- Kaggle API configured, PhysioNet account approved
-- Literature review completed: Jin et al. (2022), Chadaga (2025), AHA (2025), Salet et al. (2024)
-
-### Week 3: Clinical EDA
-- Kaggle Heart Failure dataset downloaded (`data/raw/heart.csv`, 918 × 12)
-- EDA notebook `01_eda_clinical.ipynb` with 6 cells covering: missing values, zero-cholesterol detection (172 affected rows), class balance, feature distributions, correlation heatmap, and outlier analysis
-
-### Week 4: Clinical Preprocessing Pipeline
-- `src/preprocessing/clinical.py` — median imputation for zero-cholesterol, binary encoding (Sex, ExerciseAngina), one-hot encoding (ChestPainType, RestingECG, ST_Slope), MinMaxScaler normalization, stratified 80/10/10 train/val/test split → **Train: 734 | Val: 92 | Test: 92**
-- `src/preprocessing/smote_balance.py` — SMOTE applied to training set → **{0: 406, 1: 406}** balanced classes
-- `configs/config.yaml` — all hyperparameters, paths, and model settings in one place
-
-### Week 5: ECG Signal Pipeline
-- `src/preprocessing/ecg_filter.py` — Butterworth band-pass filter (0.5–100 Hz), Lead I extraction by name lookup, 5-minute window segmentation at 500 Hz → **Windows shape: (2, 150000)**
-- PhysioNet Challenge 2020 CPSC subset downloaded (6,877 recordings via Kaggle mirror)
-- `02_eda_ecg_signals.ipynb` — raw vs filtered Lead I signal plot, signal quality stats across 20 recordings, `docs/ecg_raw_vs_filtered.png` saved
-
-### Week 6a: Model Architecture
-- `src/models/cnn_lstm.py` — CNN-LSTM in PyTorch: two Conv1d blocks `[32, 64]` with BatchNorm + MaxPool, 2-layer LSTM (hidden=128), classification head with Sigmoid output. **Output: torch.Size([4, 1]) ✅ | Parameters: 254,593**
-- `src/models/random_forest.py` — RandomForestClassifier with 5-fold stratified CV. **Recall: 0.887 ± 0.041 | F1: 0.871 ± 0.013 | AUC-ROC: 0.938 ± 0.010**
-- `src/evaluation/metrics.py` — `evaluate_model()` with configurable threshold, prints confusion matrix + classification report
-
-### Week 6b: Streamlit Dashboard
-- `src/evaluation/shap_explainer.py` — `build_explainer()`, `get_shap_values()`, `top_features()` using SHAP TreeExplainer for Random Forest
-- `src/dashboard/app.py` — full Apple Watch-style Streamlit dashboard:
-  - **10 patient profile sliders** (Age, BP, Cholesterol, MaxHR, Oldpeak, Sex, ExerciseAngina, ChestPainType, RestingECG, ST_Slope)
-  - **Live risk gauge** (green/yellow/red zones, alert banner above 50% threshold)
-  - **SHAP bar chart** — top 6 features, red = risk-increasing, green = risk-decreasing
-  - **Rolling 30-reading risk history chart** with alert threshold line
-  - Model cached with `@st.cache_resource` — loads once, updates on every slider change
 
 ---
 
 ## Quick Start
 
+### Prerequisites
+
+- Python 3.9 or higher
+- A [Kaggle account](https://www.kaggle.com) with API credentials configured (required for data download)
+
+### 1. Clone and set up environment
+
 ```bash
-# 1. Clone the repo
 git clone https://github.com/UShah1996/cardiowatch.git
 cd cardiowatch
 
-# 2. Create and activate virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate        # Mac/Linux
+# venv\Scripts\activate         # Windows
 
-# 3. Install dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
+```
 
-# 4. Run clinical pipeline
+### 2. Data Setup
+
+The datasets are not included in the repo. Download them using the Kaggle API.
+
+**Step 1 — Configure Kaggle credentials** (skip if already done):
+```bash
+# Place your kaggle.json from kaggle.com/settings/api into:
+mkdir -p ~/.kaggle
+cp /path/to/kaggle.json ~/.kaggle/kaggle.json
+chmod 600 ~/.kaggle/kaggle.json
+```
+
+**Step 2 — Download both datasets:**
+```bash
+# Clinical dataset (small, ~50 KB)
+kaggle datasets download fedesoriano/heart-failure-prediction -p data/raw --unzip
+
+# ECG dataset — CPSC subset via Kaggle mirror (~3 GB, takes several minutes)
+kaggle datasets download gamalasran/physionet-challenge-2020 -p data/raw --unzip
+```
+
+### 3. Run the pipelines
+
+```bash
+# Clinical preprocessing pipeline
 python3 src/preprocessing/clinical.py
+# Expected: Train: 734 | Val: 92 | Test: 92
 
-# 5. Run Random Forest baseline
+# Random Forest baseline (5-fold CV)
 python3 src/models/random_forest.py
+# Expected: Recall ~0.887, AUC-ROC ~0.938
 
-# 6. Validate CNN-LSTM architecture
+# Validate CNN-LSTM architecture
 python3 src/models/cnn_lstm.py
+# Expected: Output shape: torch.Size([4, 1])
 
-# 7. Launch dashboard
+# Launch Streamlit dashboard
 streamlit run src/dashboard/app.py
+# Opens at http://localhost:8501
 ```
 
 ---
 
 ## Validation Checklist
 
-| Week | Command | Expected Result |
+Run these to confirm everything is working after setup:
+
+| Component | Command | Expected Result |
 |---|---|---|
-| Wk 1–2: Packages | `python3 -c "import torch, pandas, sklearn, wfdb"` | No errors |
-| Wk 1–2: Git | `git log --oneline` | Shows all commits |
-| Wk 3: Dataset | `python3 -c "import pandas as pd; df=pd.read_csv('data/raw/heart.csv'); print(df.shape)"` | `(918, 12)` |
-| Wk 4: Pipeline | `python3 src/preprocessing/clinical.py` | Train: 734, Val: 92, Test: 92 |
-| Wk 4: SMOTE | `python3 src/preprocessing/smote_balance.py` | After SMOTE: {0: 406, 1: 406} |
-| Wk 5: ECG filter | `python3 src/preprocessing/ecg_filter.py` | Windows shape: (2, 150000) |
-| Wk 6a: CNN-LSTM | `python3 src/models/cnn_lstm.py` | Output shape: torch.Size([4, 1]) |
-| Wk 6a: RF baseline | `python3 src/models/random_forest.py` | Recall ≥ 0.85, AUC ≥ 0.88 |
-| Wk 6b: Dashboard | `streamlit run src/dashboard/app.py` | Opens at localhost:8501 |
-| Wk 6b: SHAP | `python3 -c "import shap; print(shap.__version__)"` | 0.45.x |
+| Packages | `python3 -c "import torch, pandas, sklearn, wfdb, shap, streamlit"` | No errors |
+| Dataset | `python3 -c "import pandas as pd; df=pd.read_csv('data/raw/heart.csv'); print(df.shape)"` | `(918, 12)` |
+| Clinical pipeline | `python3 src/preprocessing/clinical.py` | Train: 734, Val: 92, Test: 92 |
+| SMOTE | `python3 src/preprocessing/smote_balance.py` | After SMOTE: {0: 406, 1: 406} |
+| ECG filter | `python3 src/preprocessing/ecg_filter.py` | Windows shape: (2, 150000) |
+| CNN-LSTM | `python3 src/models/cnn_lstm.py` | Output shape: torch.Size([4, 1]) |
+| RF baseline | `python3 src/models/random_forest.py` | Recall ≥ 0.85, AUC ≥ 0.88 |
+| Dashboard | `streamlit run src/dashboard/app.py` | Opens at localhost:8501 |
 
 ---
 
-## 🗓️ Next 4 Weeks — Upcoming Plan (Apr–May 2026)
+## What Is Built (Weeks 1–6b, as of Mar 30, 2026)
+
+### Weeks 1–2: Environment & Setup
+- Python 3.9 virtual environment with all dependencies installed
+- GitHub repo initialized, Kaggle API configured, PhysioNet account approved
+- Literature review completed: Jin et al. (2022), Chadaga (2025), AHA (2025), Salet et al. (2024)
+
+### Week 3: Clinical EDA
+- Kaggle Heart Failure dataset downloaded (`data/raw/heart.csv`, 918 × 12)
+- EDA notebook `01_eda_clinical.ipynb`: missing values, zero-cholesterol detection (172 affected rows), class balance (508 vs 410), feature distributions, correlation heatmap, outlier analysis
+
+### Week 4: Clinical Preprocessing Pipeline
+- `src/preprocessing/clinical.py` — median imputation, binary + one-hot encoding, MinMaxScaler, stratified 80/10/10 split → **Train: 734 | Val: 92 | Test: 92**
+- `src/preprocessing/smote_balance.py` — SMOTE on training set → **{0: 406, 1: 406}**
+- `configs/config.yaml` — all hyperparameters centralized
+
+### Week 5: ECG Signal Pipeline
+- `src/preprocessing/ecg_filter.py` — Butterworth band-pass filter (0.5–100 Hz), Lead I extraction, 5-min windowing → **Windows shape: (2, 150000)**
+- CPSC subset downloaded (6,877 recordings)
+- `02_eda_ecg_signals.ipynb` — raw vs filtered ECG plot, signal quality stats, `docs/ecg_raw_vs_filtered.png`
+
+### Week 6a: Model Architecture
+- `src/models/cnn_lstm.py` — CNN-LSTM: Conv1d blocks [32, 64] + BatchNorm + MaxPool, 2-layer LSTM (hidden=128), Sigmoid output. **Output: torch.Size([4, 1]) | Parameters: 254,593**
+- `src/models/random_forest.py` — 5-fold CV. **Recall: 0.887 ± 0.041 | F1: 0.871 ± 0.013 | AUC-ROC: 0.938 ± 0.010**
+- `src/evaluation/metrics.py` — `evaluate_model()` with configurable threshold, confusion matrix + classification report
+
+### Week 6b: Streamlit Dashboard
+- `src/evaluation/shap_explainer.py` — SHAP TreeExplainer: `build_explainer()`, `get_shap_values()`, `top_features()`
+- `src/dashboard/app.py` — Apple Watch-style dashboard:
+  - 10 patient profile sliders (Age, BP, Cholesterol, MaxHR, Oldpeak, Sex, ExerciseAngina, ChestPainType, RestingECG, ST_Slope)
+  - Live risk gauge (green/yellow/red zones, alert banner above threshold)
+  - SHAP bar chart — top 6 features, red = risk-increasing, green = risk-decreasing
+  - Rolling 30-reading risk history chart with threshold line
+  - Model cached with `@st.cache_resource`
+
+---
+
+## Upcoming Plan (Weeks 7–10, Apr–May 2026)
 
 ### Week 7: XGBoost Baseline + Threshold Tuning
 - Implement `src/models/xgboost_model.py` with `scale_pos_weight` for class imbalance
 - Compare XGBoost vs Random Forest on Recall, F1, AUC-ROC on held-out test set
-- Tune decision threshold on both models to push Recall to **≥ 0.90** (target from proposal)
-- Add `evaluate_model()` calls with threshold=0.40 sweep in `src/evaluation/metrics.py`
-- Run final test-set evaluation and log results to `docs/baseline_results.md`
+- Tune decision threshold on both models to push Recall to **≥ 0.93**
+- Log results to `docs/baseline_results.md`
 
 ### Week 8: CNN-LSTM Training on ECG Data
-- Build `src/preprocessing/ecg_dataset.py` — PyTorch `Dataset` class for windowed ECG `.npz` files
-- Train CNN-LSTM on CPSC subset with labels from PhysioNet header files
-- Track train/val loss and recall per epoch using MLflow (`mlflow ui`)
-- Target: val recall ≥ 0.85 on ECG-only classification
+- Build `src/preprocessing/ecg_dataset.py` — PyTorch `Dataset` for windowed ECG files
+- Train CNN-LSTM on CPSC subset, track with MLflow
+- Add Gaussian noise augmentation for wearable-quality robustness
 - Save best checkpoint to `data/processed/cnn_lstm_best.pt`
-- Add noise augmentation (Gaussian noise injection) to improve robustness on wearable-quality signals
 
 ### Week 9: Multi-Modal Fusion + Lead-Time Evaluation
-- Combine Random Forest risk score + CNN-LSTM ECG risk score into a fusion layer
-- Implement `src/evaluation/lead_time.py` — measure how many minutes before a simulated event the fused score crosses the alert threshold
-- Target: **≥ 30-minute lead time** (core proposal requirement)
-- Simulate Apple Watch-style streaming in `data/simulated/` using HealthKit reference patterns
+- Combine RF + CNN-LSTM scores into a fusion layer
+- Implement `src/evaluation/lead_time.py` — measure advance warning before simulated events
+- Target: **≥ 30-minute lead time**
+- Simulate Apple Watch-style data streams in `data/simulated/`
 
-### Week 10: Final Evaluation, SHAP Audit & Report
-- Full evaluation on held-out test set across all three models
-- SHAP summary plots for Random Forest — beeswarm and bar charts saved to `docs/`
-- Robustness testing: evaluate on noisy ECG inputs (motion artifact simulation)
-- 5-fold stratified cross-validation final pass with confusion matrices
-- Write final project report and update dashboard with all three model comparisons
-- Deploy dashboard to Streamlit Cloud for live demo link in README
+### Week 10: Apple Watch Integration Path + Final Report
+- Build pipeline to read Apple Watch ECG exports directly (Health app → Export as CSV, 512 Hz)
+- The same band-pass filter and windowing code handles Apple Watch CSVs with no modification, since Apple Watch records Lead I — the same signal the model was trained on
+- Update dashboard to accept an uploaded Apple Watch CSV and show a real risk score
+- Full real-time WatchOS streaming is out of scope for this semester (requires Apple Developer account + Swift app), but the export-based path is testable with a real device
+- SHAP summary plots, robustness tests, final cross-validation pass, Streamlit Cloud deployment
 
 ---
 
@@ -192,7 +223,7 @@ streamlit run src/dashboard/app.py
 
 | Metric | Target | Current Status |
 |---|---|---|
-| Recall (Sensitivity) | ≥ 90% | 88.7% (RF baseline, close) |
+| Recall (Sensitivity) | ≥ 93% | 88.7% (RF baseline — threshold tuning planned) |
 | Lead-Time Warning | ≥ 30 minutes | Planned — Week 9 |
 | AUC-ROC | Maximize | 0.938 (RF baseline) ✅ |
 | F1-Score | Maximize | 0.871 (RF baseline) |
