@@ -31,7 +31,7 @@ models:
     scale_pos_weight: 5
     random_state: 42
   cnn_lstm:
-    cnn_filters: [32, 64, 128]
+    cnn_filters: [32, 64]
     cnn_kernel_size: 7
     lstm_hidden_size: 128
     lstm_layers: 2

@@ -4,7 +4,7 @@ from sklearn.metrics import (
 )
 import numpy as np
 
-def evaluate_model(model, X_test, y_test, threshold=0.5):
+def evaluate_model(model, X_test, y_test, threshold=0.4):
     y_prob = model.predict_proba(X_test)[:, 1]
     y_pred = (y_prob >= threshold).astype(int)
     
