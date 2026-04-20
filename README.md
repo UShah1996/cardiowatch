@@ -190,8 +190,6 @@ Run these to confirm everything is working after setup:
 
 ---
 
-## Upcoming Plan (Weeks 7–10, Apr–May 2026)
-
 ### Week 7: XGBoost Baseline + Threshold Tuning
 - Implement `src/models/xgboost_model.py` with `scale_pos_weight` for class imbalance
 - Compare XGBoost vs Random Forest on Recall, F1, AUC-ROC on held-out test set
