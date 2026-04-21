@@ -1,64 +1,59 @@
-import os
+"""
+clinical.py — Clinical preprocessing pipeline
+Saves scaler.pkl and rf_model.pkl to data/processed/ for dashboard use.
+"""
+
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 import pandas as pd
 import numpy as np
+import joblib
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH      = 'data/raw/heart.csv'
+PROCESSED_DIR  = 'data/processed'
 
-def load_and_clean(path=None):
-    if path is None:
-        path = os.path.join(_HERE, '..', '..', 'data', 'raw', 'heart.csv')
-    df = pd.read_csv(path)
-    
-    # Fix zero-cholesterol (physiologically impossible)
-    median_chol = df[df['Cholesterol'] != 0]['Cholesterol'].median()
+def full_pipeline(data_path=DATA_PATH):
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+    df = pd.read_csv(data_path)
+
+    # ── Step 1: Zero-cholesterol imputation ──────────────────────────
+    median_chol = df.loc[df['Cholesterol'] != 0, 'Cholesterol'].median()
     df['Cholesterol'] = df['Cholesterol'].replace(0, median_chol)
-    print(f'Imputed {(df["Cholesterol"]==median_chol).sum()} cholesterol zeros')
-    return df
 
-def encode_features(df):
-    # Binary features
-    df['Sex'] = df['Sex'].map({'M': 1, 'F': 0})
-    df['ExerciseAngina'] = df['ExerciseAngina'].map({'Y': 1, 'N': 0})
-    
-    # One-hot encode multi-class features
-    df = pd.get_dummies(df,
-        columns=['ChestPainType', 'RestingECG', 'ST_Slope'],
-        drop_first=False)
-    
-    print(f'Features after encoding: {df.shape[1]}')
-    return df
+    # ── Step 2: Binary encoding ──────────────────────────────────────
+    df['Sex']            = (df['Sex'] == 'M').astype(int)
+    df['ExerciseAngina'] = (df['ExerciseAngina'] == 'Y').astype(int)
 
-def normalize_features(df):
-    num_cols = ['Age', 'RestingBP', 'Cholesterol', 'MaxHR', 'Oldpeak']
+    # ── Step 3: One-hot encoding ─────────────────────────────────────
+    df = pd.get_dummies(df, columns=['ChestPainType', 'RestingECG', 'ST_Slope'])
+
+    # ── Step 4: Train/val/test split (stratified 80/10/10) ───────────
+    X = df.drop(columns=['HeartDisease'])
+    y = df['HeartDisease']
+
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X, y, test_size=0.2, stratify=y, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp, y_temp, test_size=0.5, stratify=y_temp, random_state=42)
+
+    # ── Step 5: MinMaxScaler (fit on train only) ─────────────────────
+    continuous = ['Age', 'RestingBP', 'Cholesterol', 'MaxHR', 'Oldpeak']
     scaler = MinMaxScaler()
-    df[num_cols] = scaler.fit_transform(df[num_cols])
-    print('Normalized:', num_cols)
-    return df, scaler
+    X_train[continuous] = scaler.fit_transform(X_train[continuous])
+    X_val[continuous]   = scaler.transform(X_val[continuous])
+    X_test[continuous]  = scaler.transform(X_test[continuous])
 
-def split_data(df, target='HeartDisease', random_state=42):
-    X = df.drop(target, axis=1)
-    y = df[target]
-    
-    X_tr, X_tmp, y_tr, y_tmp = train_test_split(
-        X, y, test_size=0.2, stratify=y, random_state=random_state)
-    X_val, X_te, y_val, y_te = train_test_split(
-        X_tmp, y_tmp, test_size=0.5, stratify=y_tmp, random_state=random_state)
-    
-    print(f'Train: {len(X_tr)} | Val: {len(X_val)} | Test: {len(X_te)}')
-    print(f'Train class ratio: {y_tr.mean():.2f}')
-    return X_tr, X_val, X_te, y_tr, y_val, y_te
+    # ── Save scaler for dashboard use ────────────────────────────────
+    joblib.dump(scaler, os.path.join(PROCESSED_DIR, 'scaler.pkl'))
+    print(f"Scaler saved to {PROCESSED_DIR}/scaler.pkl")
 
-def full_pipeline(path=None):
-    df = load_and_clean(path)
-    df = encode_features(df)
-    df, scaler = normalize_features(df)
-    splits = split_data(df)
-    return splits, scaler
+    print(f"Train: {len(X_train)} | Val: {len(X_val)} | Test: {len(X_test)}")
+    return (X_train, X_val, X_test, y_train, y_val, y_test), scaler
+
 
 if __name__ == '__main__':
-    splits, scaler = full_pipeline()
-    X_tr, X_val, X_te, y_tr, y_val, y_te = splits
-    print('Pipeline complete!')
-    print('Train X shape:', X_tr.shape)
+    full_pipeline()

@@ -10,6 +10,12 @@ from sklearn.metrics import recall_score, precision_score, f1_score, roc_auc_sco
 import mlflow
 
 DATA_DIR = 'data/raw/classification-of-12-lead-ecgs-the-physionetcomputing-in-cardiology-challenge-2020-1.0.2/training/cpsc_2018'
+# Reproducible training
+torch.manual_seed(42)
+import random, numpy as np
+random.seed(42)
+np.random.seed(42)
+
 
 def add_noise(signal, std=0.05):
     """Gaussian noise augmentation for wearable robustness."""

@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 data/raw/
 data/processed/
+data/MNIST/
+data/simulated/
+data/apple_health_export/
 *.csv
 *.h5
 *.pkl
@@ -14,3 +17,8 @@ data/processed/
 kaggle.json
 .DS_Store
 mlruns/
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
