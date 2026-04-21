@@ -46,9 +46,8 @@ cardiowatch/
 │   └── dashboard/
 │       └── app.py                # Streamlit Apple Watch risk simulator with fusion
 ├── notebooks/
-│   ├── CardioWatch_Complete.ipynb  # Full pipeline notebook — runs everything end to end
-│   ├── 01_eda_clinical.ipynb       # Clinical dataset EDA
-│   └── 02_eda_ecg_signals.ipynb    # ECG signal EDA, raw vs filtered plots
+│   └── CardioWatch_Complete.ipynb  # Full pipeline — EDA, preprocessing, training, evaluation 
+│   
 ├── configs/
 │   └── config.yaml               # Hyperparameters & paths
 ├── docs/
