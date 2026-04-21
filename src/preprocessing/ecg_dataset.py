@@ -11,8 +11,7 @@ class ECGDataset(Dataset):
         self.labels  = []
         self.target_len = target_len
 
-        # CPSC 2018 SNOMED code for Normal Sinus Rhythm
-        NORMAL_CODE = '426783006'
+        AFIB_CODE = '164889003'
 
         for root, dirs, files in os.walk(data_dir):
             for fname in files:
@@ -25,16 +24,19 @@ class ECGDataset(Dataset):
                     leads  = [n.strip().upper() for n in record.sig_name]
                     if 'I' not in leads:
                         continue
+
                     sig = record.p_signal[:, leads.index('I')].astype(np.float32)
                     sig = np.nan_to_num(sig)
+                    sig = np.clip(sig, -2.0, 2.0)
+                    sig = (sig - np.mean(sig)) / (np.std(sig) + 1e-8)
+                    sig = np.clip(sig, -5.0, 5.0)
 
-                    # Parse Dx field — e.g. 'Dx: 426783006' or 'Dx: 270492004,164931005'
                     dx_codes = []
                     for c in header.comments:
                         if c.startswith('Dx:'):
                             dx_codes = [x.strip() for x in c.replace('Dx:', '').split(',')]
 
-                    label = 0 if NORMAL_CODE in dx_codes else 1
+                    label = 1 if AFIB_CODE in dx_codes else 0
                     self.records.append(sig)
                     self.labels.append(label)
                 except Exception:

@@ -6,6 +6,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 from src.models.cnn_lstm import build_model
 from src.preprocessing.ecg_dataset import ECGDataset
+from sklearn.metrics import recall_score, precision_score, f1_score, roc_auc_score, confusion_matrix
 import mlflow
 
 DATA_DIR = 'data/raw/classification-of-12-lead-ecgs-the-physionetcomputing-in-cardiology-challenge-2020-1.0.2/training/cpsc_2018'
@@ -20,48 +21,81 @@ def train():
     n_val   = len(dataset) - n_train
     train_ds, val_ds = random_split(dataset, [n_train, n_val])
 
-    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
-    val_loader   = DataLoader(val_ds,   batch_size=32)
+    train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)  # increased
+    val_loader   = DataLoader(val_ds,   batch_size=64)
 
-    # Use 5000-sample input (10 seconds, not 5 minutes — matches CPSC duration)
-    model     = build_model(input_length=5000)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    pos_weight = torch.tensor([5959 / 918])  # abnormal/normal ratio
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    # M1 GPU acceleration
+    device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
+    print(f'Using device: {device}')
+
+    model = build_model(input_length=5000).to(device)  # move model to M1 GPU
+
+    optimizer  = torch.optim.Adam(model.parameters(), lr=0.0003)
+    pos_weight = torch.tensor([5656 / 1221]).to(device)  # must be on same device
+    criterion  = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 
     mlflow.start_run()
-    best_recall = 0
+    patience   = 5
+    no_improve = 0
+    best_auc   = 0
 
     for epoch in range(30):
         model.train()
         for X, y in train_loader:
-            X = add_noise(X)          # augment
+            X, y = X.to(device), y.to(device)  # move batch to M1 GPU
+            X    = add_noise(X)
             pred = model(X).squeeze()
             loss = criterion(pred, y)
             optimizer.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
-        # Validation
         model.eval()
-        all_preds, all_labels = [], []
+        all_probs, all_labels = [], []
         with torch.no_grad():
             for X, y in val_loader:
-                pred = model(X).squeeze()
-                all_preds.extend((torch.sigmoid(pred) >= 0.4).int().tolist())
-                all_labels.extend(y.int().tolist())
+                X, y  = X.to(device), y.to(device)  # move batch to M1 GPU
+                logits = model(X).squeeze()
+                probs  = torch.sigmoid(logits)
+                all_probs.extend(probs.cpu().tolist())   # back to CPU for sklearn
+                all_labels.extend(y.cpu().int().tolist())
 
-        from sklearn.metrics import recall_score, roc_auc_score
-        recall = recall_score(all_labels, all_preds, zero_division=0)
-        mlflow.log_metrics({'recall': recall, 'epoch': epoch})
-        print(f'Epoch {epoch+1} | Recall: {recall:.3f}')
+        for thresh in [0.3, 0.4, 0.5]:
+            preds     = [1 if p >= thresh else 0 for p in all_probs]
+            recall    = recall_score(all_labels, preds, zero_division=0)
+            precision = precision_score(all_labels, preds, zero_division=0)
+            f1        = f1_score(all_labels, preds, zero_division=0)
+            print(f'Epoch {epoch+1} | thresh={thresh} | Recall={recall:.3f} | Precision={precision:.3f} | F1={f1:.3f}')
 
-        if recall > best_recall:
-            best_recall = recall
+        try:
+            auc = roc_auc_score(all_labels, all_probs)
+        except:
+            auc = 0.0
+
+        cm = confusion_matrix(all_labels, [1 if p >= 0.4 else 0 for p in all_probs])
+        print(f'  AUC-ROC={auc:.3f}')
+        print(f'  Confusion matrix (thresh=0.4):')
+        print(f'    TN={cm[0][0]}  FP={cm[0][1]}')
+        print(f'    FN={cm[1][0]}  TP={cm[1][1]}')
+
+        mlflow.log_metrics({
+            'recall_t04': recall_score(all_labels, [1 if p >= 0.4 else 0 for p in all_probs], zero_division=0),
+            'f1_t04':     f1_score(all_labels, [1 if p >= 0.4 else 0 for p in all_probs], zero_division=0),
+            'auc_roc':    auc,
+            'epoch':      epoch
+        }, step=epoch)
+
+        if auc > best_auc:
+            best_auc   = auc
+            no_improve = 0
             torch.save(model.state_dict(), 'data/processed/cnn_lstm_best.pt')
-
-    mlflow.end_run()
-    print(f'Best ECG recall: {best_recall:.3f}')
+            print(f'  Saved best model (AUC={best_auc:.3f})')
+        else:
+            no_improve += 1
+            if no_improve >= patience:
+                print(f'Early stopping at epoch {epoch+1} — no improvement for {patience} epochs')
+                break
 
 if __name__ == '__main__':
     train()
