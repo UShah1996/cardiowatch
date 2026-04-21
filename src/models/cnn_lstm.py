@@ -45,7 +45,7 @@ class CnnLstmECG(nn.Module):
             nn.Linear(lstm_hidden, 64),
             nn.ReLU(),
             nn.Linear(64, num_classes),
-            nn.Sigmoid(),
+            #nn.Sigmoid(),
         )
     
     def forward(self, x):
