@@ -21,4 +21,6 @@ mlruns/
 notebooks/.ipynb_checkpoints/
 *.egg-info/
 dist/
-build/
+build/~$*.docx
+~$*.xlsx
+~$*.pptx
