@@ -302,63 +302,95 @@ def predict_apple_watch(csv_path, model, feature_names,
 
 # ── Evaluate on Apple Watch files ─────────────────────────────────────
 def evaluate_apple_watch(model, feature_names, threshold=0.4):
-    """
-    Test on personal Apple Watch ECG recordings.
-    Uses threshold=0.4 (tuned for Apple Watch domain).
-    """
-    APPLE_DIR = 'data/apple_health_export/electrocardiograms'
+    import glob
 
-    apple_files = {
-        'Sinus (2022-08-23)':   (f'{APPLE_DIR}/ecg_2022-08-23.csv', 'No AFib'),
-        'High HR (2022-08-24)': (f'{APPLE_DIR}/ecg_2022-08-24.csv', 'No AFib'),
-        'AFib (2022-09-15)':    (f'{APPLE_DIR}/ecg_2022-09-15.csv', 'AFib'),
-        'Sinus (2023-04-23)':   (f'{APPLE_DIR}/ecg_2023-04-23.csv', 'No AFib'),
-        'High HR (2023-04-25)': (f'{APPLE_DIR}/ecg_2023-04-25.csv', 'No AFib'),
-        'Sinus (2023-11-18)':   (f'{APPLE_DIR}/ecg_2023-11-18.csv', 'No AFib'),
+    people = {
+        'apple_health_export_urmi':    'data/apple_health_export/apple_health_export_urmi/electrocardiograms',
+        'apple_health_export_Mihir':   'data/apple_health_export/apple_health_export_Mihir/electrocardiograms',
+        'apple_health_export_saurabh': 'data/apple_health_export/apple_health_export_saurabh/electrocardiograms',
+        'apple_health_export_steven':  'data/apple_health_export/apple_health_export_steven/electrocardiograms',
     }
 
-    print('\n' + '='*80)
-    print(f'Apple Watch Evaluation — RR Traditional ML (threshold={threshold})')
-    print(f'Fix applied: skipping first {APPLE_WATCH_SKIP_SEC}s placement artifact')
-    print('='*80)
-    print(f"{'File':<26} | {'Apple Says':<10} | {'Score':>7} | "
-          f"{'Pred':<9} | {'CV':>6} | {'HR':>6} | {'Correct?'}")
-    print('-'*80)
+    def load_csv(path):
+        """Handles both comment-style and plain header CSV formats."""
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        skip = 0
+        meta = {}
+        for i, line in enumerate(lines):
+            line = line.strip()
+            try:
+                float(line.split(',')[0]); skip = i; break
+            except:
+                if ',' in line:
+                    k, v = line.split(',', 1)
+                    meta[k.strip()] = v.strip().strip('"')
+        import pandas as pd
+        sig = pd.read_csv(path, skiprows=skip, header=None)
+        sig = pd.to_numeric(sig.iloc[:, 0], errors='coerce').dropna().values.astype('float32')
+        return sig, meta
 
-    correct = total = 0
+    grand_correct = grand_total = 0
 
-    for label, (path, apple_says) in apple_files.items():
-        if not os.path.exists(path):
-            print(f'{label:<26} | FILE NOT FOUND — check APPLE_DIR path')
+    for person, dir_path in people.items():
+        if not os.path.exists(dir_path):
+            print(f'{person}: directory not found — skipping')
             continue
 
-        prob, feats = predict_apple_watch(
-                    path, model, feature_names)
+        files = sorted(glob.glob(f'{dir_path}/*.csv'))
+        print(f'\n=== {person} — {len(files)} recordings ===')
+        print(f'{"File":<35} | {"Apple Says":<20} | {"Score":>6} | {"CV":>6} | {"Pred":<10} | OK?')
+        print('-'*95)
 
-        if prob is None:
-            print(f'{label:<26} | Could not extract RR features')
-            continue
+        correct = total = 0
+        for f in files:
+            try:
+                sig, meta = load_csv(f)
+                apple_says = meta.get('Classification', '')
 
-        prediction = 'AFib' if prob >= threshold else 'No AFib'
-        is_correct = prediction == apple_says
-        correct   += int(is_correct)
-        total     += 1
-        cv_val     = feats.get('rr_cv', 0)
-        hr_val     = feats.get('heart_rate', 0)
+                if apple_says == 'Poor Recording':
+                    print(f'  {os.path.basename(f):<33} | {apple_says:<20} | SKIPPED')
+                    continue
 
-        print(f'{label:<26} | {apple_says:<10} | {prob:>7.3f} | '
-              f'{prediction:<9} | {cv_val:>6.3f} | {hr_val:>6.0f} | '
-              f"{'✅' if is_correct else '❌'}")
+                from scipy.signal import resample
+                sig = sig / 1000.0
+                sig = resample(sig, int(len(sig) * 500 / 512)).astype('float32')
+                sig = sig[int(5 * 500):]  # skip 5s artifact
 
-    print()
-    if total > 0:
-        print(f'Accuracy: {correct}/{total} = {correct/total:.1%}')
-        print(f'\nRR CV interpretation:')
-        print(f'  > 0.15 → AFib likely (clinical threshold)')
-        print(f'  < 0.05 → Normal sinus rhythm')
-        print(f'  0.05–0.15 → Borderline / ectopic beats')
+                feats = extract_rr_features(sig, fs=500)
+                if feats is None:
+                    print(f'  {os.path.basename(f):<33} | {apple_says:<20} | NO FEATURES')
+                    continue
 
-    return correct, total
+                feat_vec = pd.DataFrame([{k: feats.get(k, 0) for k in feature_names}])
+                prob     = float(model.predict_proba(feat_vec)[0, 1])
+                cv       = feats.get('rr_cv', 0)
+                if cv < 0.15:
+                    prob = min(prob, 0.25)
+
+                pred       = 'AFib' if prob >= threshold else 'No AFib'
+                apple_afib = 'AFib' if apple_says == 'Atrial Fibrillation' else 'No AFib'
+                is_correct = pred == apple_afib
+                correct   += int(is_correct)
+                total     += 1
+                hr         = feats.get('heart_rate', 0)
+                mark       = '✅' if is_correct else '❌'
+                print(f'  {os.path.basename(f):<33} | {apple_says:<20} | {prob:>6.3f} | {cv:>6.3f} | {pred:<10} | {mark}  HR={hr:.0f}')
+
+            except Exception as e:
+                print(f'  {os.path.basename(f)} — error: {e}')
+
+        if total > 0:
+            print(f'\n  {person}: {correct}/{total} = {correct/total:.1%}')
+            grand_correct += correct
+            grand_total   += total
+
+    print(f'\n{"="*60}')
+    print(f'OVERALL: {grand_correct}/{grand_total} = {grand_correct/grand_total:.1%} across 4 people')
+    print(f'(vs CNN-LSTM CPSC-only: ~50%)')
+    print(f'{"="*60}')
+
+    return grand_correct, grand_total
 
 
 # ── Threshold sweep ───────────────────────────────────────────────────

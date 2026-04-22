@@ -24,3 +24,6 @@ dist/
 build/~$*.docx
 ~$*.xlsx
 ~$*.pptx
+~$*.docx
+~$*.xlsx
+~$*.pptx

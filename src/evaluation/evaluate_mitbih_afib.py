@@ -28,7 +28,7 @@ from sklearn.metrics import (recall_score, precision_score, f1_score,
                              classification_report)
 from src.models.rr_afib_detector import extract_rr_features
 
-MIT_DIR       = 'data/raw/mit_afib'
+MIT_DIR       = 'data/raw/mit_afib/files'
 MODEL_PATH    = 'data/processed/rr_rf_model.pkl'
 WINDOW_SEC    = 30     # 30-second windows — matches Apple Watch + PhysioNet 2017
 TARGET_FS     = 500    # resample to match training data
