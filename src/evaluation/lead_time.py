@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 from src.models.cnn_lstm import build_model
 
 # ── Config ────────────────────────────────────────────────────────────
-WEIGHTS_PATH   = 'data/processed/cnn_lstm_best.pt'
+WEIGHTS_PATH   = 'data/processed/cnn_lstm_combined_best.pt'
 THRESHOLD      = 0.5
 WINDOW_SAMPLES = 5000      # 10s at 500 Hz — must match training
 FS             = 500
