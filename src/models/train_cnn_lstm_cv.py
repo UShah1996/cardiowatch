@@ -37,7 +37,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import random
-from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import (
     recall_score, precision_score, f1_score, roc_auc_score, confusion_matrix
@@ -101,15 +101,13 @@ def train_one_fold(
     print(f"FOLD {fold}/{N_FOLDS}  |  train={len(train_idx)}  val={len(val_idx)}")
     print(f"{'─'*55}")
 
-    # ── Dataloaders with WeightedRandomSampler on training split ──────
-    train_labels = [int(dataset[i][1].item()) for i in train_idx]
-    class_counts = [train_labels.count(0), train_labels.count(1)]
-    weights      = [1.0 / class_counts[l] for l in train_labels]
-    sampler      = WeightedRandomSampler(weights, len(weights), replacement=True)
-
+    # ── Dataloaders — shuffle only, pos_weight handles class imbalance ──
+    # WeightedRandomSampler + pos_weight together causes the model to
+    # collapse to predicting AFib for everything. Use shuffle=True only,
+    # matching train_cnn_lstm_combined.py which achieved AUC=0.974.
     train_loader = DataLoader(
         Subset(dataset, train_idx),
-        batch_size=BATCH_SIZE, sampler=sampler, num_workers=0,
+        batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
     )
     val_loader = DataLoader(
         Subset(dataset, val_idx),
