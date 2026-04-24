@@ -1,45 +1,35 @@
 # CardioWatch — Streamlit Cloud requirements
 # Python 3.11 required (.python-version file in repo root pins this)
-#
-# Derived from app.py actual imports + transitive src/ module-level imports.
-# Training-only scripts (train_cnn_lstm*.py, lead_time.py, etc.) are never
-# called by the dashboard — their deps (mlflow, matplotlib) are excluded.
 
-# ── Framework ─────────────────────────────────────────────────────────
 streamlit==1.35.0
 
-# ── Deep learning ─────────────────────────────────────────────────────
-torch==2.3.0
-torchvision==0.18.0
+# Deep learning
+torch>=2.3.0,<2.6.0
+torchvision>=0.18.0,<0.21.0
 
-# ── Classical ML ──────────────────────────────────────────────────────
+# Classical ML
 scikit-learn==1.4.2
 xgboost==2.0.3
 joblib==1.5.3
 imbalanced-learn==0.12.3
 
-# ── Data ──────────────────────────────────────────────────────────────
+# Data
 numpy==1.26.4
 pandas==2.2.2
 scipy==1.13.0
 
-# ── Visualisation ─────────────────────────────────────────────────────
+# Visualisation
 plotly==5.22.0
 
-# ── Explainability ────────────────────────────────────────────────────
+# Explainability
 shap==0.45.1
 
-# ── ECG / signal processing ───────────────────────────────────────────
+# ECG / signal processing
 wfdb==4.1.2
 neurokit2==0.2.9
 
-# ── Config parsing ────────────────────────────────────────────────────
-# ecg_filter.py and cnn_lstm.py both `import yaml` at module level;
-# app.py imports both, so pyyaml must be present at runtime.
+# Config parsing
 pyyaml>=6.0
 
-# ── NOT included (training-only, never reached by app.py) ─────────────
-# mlflow      — only in train_cnn_lstm*.py
-# matplotlib  — only in lead_time.py / lead_time_sweep.py
-
-gdown>=4.7.3
+# Google Drive downloader — pin to version that does NOT have fuzzy param issues
+gdown==4.6.3
