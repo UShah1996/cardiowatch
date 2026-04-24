@@ -16,6 +16,15 @@ import joblib
 import torch
 from collections import deque
 
+
+# ── Page config ───────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="CardioWatch",
+    page_icon="🫀",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # ── Weight download (Streamlit Cloud) ────────────────────────────────
 from src.dashboard.download_weights import ensure_weights
  
@@ -26,14 +35,6 @@ def _download_weights_once():
  
 # Call before load_models() — downloads missing weights, no-op if present
 _download_weights_once()
-
-# ── Page config ───────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="CardioWatch",
-    page_icon="🫀",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # ── Load saved models ─────────────────────────────────────────────────
 # ── Demo mode: synthetic model for Streamlit Cloud (no weights) ──────
