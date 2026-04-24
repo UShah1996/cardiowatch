@@ -41,3 +41,5 @@ pyyaml>=6.0
 # ── NOT included (training-only, never reached by app.py) ─────────────
 # mlflow      — only in train_cnn_lstm*.py
 # matplotlib  — only in lead_time.py / lead_time_sweep.py
+
+gdown>=4.7.3
