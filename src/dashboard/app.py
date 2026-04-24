@@ -29,12 +29,12 @@ st.set_page_config(
 from src.dashboard.download_weights import ensure_weights
  
 @st.cache_resource
-def _download_weights_once():
+def _download_weights():
     """Download weights from Google Drive on first load only."""
     ensure_weights()
  
 # Call before load_models() — downloads missing weights, no-op if present
-_download_weights_once()
+_download_weights()
 
 # ── Load saved models ─────────────────────────────────────────────────
 # ── Demo mode: synthetic model for Streamlit Cloud (no weights) ──────
