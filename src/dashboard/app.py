@@ -26,15 +26,78 @@ st.set_page_config(
 )
 
 # ── Weight download (Streamlit Cloud) ────────────────────────────────
-from src.dashboard.download_weights import ensure_weights
- 
-@st.cache_resource
-def _download_weights():
-    """Download weights from Google Drive on first load only."""
-    ensure_weights()
- 
-# Call before load_models() — downloads missing weights, no-op if present
-_download_weights()
+# ── Weight download (Streamlit Cloud) ────────────────────────────────
+import os
+
+def _download_weights_on_startup():
+    PROCESSED_DIR = 'data/processed'
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
+
+    # Already downloaded — skip
+    if os.path.exists(f'{PROCESSED_DIR}/rf_model.pkl') and \
+       os.path.getsize(f'{PROCESSED_DIR}/rf_model.pkl') > 10_000:
+        return True
+
+    status_container = st.empty()
+    status_container.info("⏳ Downloading model weights (first load only — ~2 min)...")
+
+    try:
+        import gdown
+        from src.dashboard.download_weights import WEIGHTS
+
+        progress = st.progress(0)
+        results  = {}
+
+        for i, (name, fid) in enumerate(WEIGHTS.items()):
+            dest = os.path.join(PROCESSED_DIR, name)
+            if os.path.exists(dest) and os.path.getsize(dest) > 10_000:
+                results[name] = True
+                progress.progress((i + 1) / len(WEIGHTS))
+                continue
+
+            status_container.info(f"⏳ Downloading {name} ({i+1}/{len(WEIGHTS)})...")
+            try:
+                gdown.download(
+                    f'https://drive.google.com/uc?id={fid}',
+                    dest, quiet=False, fuzzy=True
+                )
+                size = os.path.getsize(dest) if os.path.exists(dest) else 0
+                if size > 10_000:
+                    results[name] = True
+                else:
+                    st.error(
+                        f"❌ {name} is {size} bytes — likely a Drive permission error. "
+                        f"Set file sharing to 'Anyone with the link'."
+                    )
+                    if os.path.exists(dest): os.remove(dest)
+                    results[name] = False
+            except Exception as e:
+                st.error(f"❌ {name} failed: {e}")
+                results[name] = False
+
+            progress.progress((i + 1) / len(WEIGHTS))
+
+        progress.empty()
+        n_ok = sum(results.values())
+        if n_ok == len(WEIGHTS):
+            status_container.success(f"✅ All {n_ok} weights downloaded.")
+            return True
+        else:
+            failed = [k for k, v in results.items() if not v]
+            status_container.warning(
+                f"⚠️ {n_ok}/{len(WEIGHTS)} weights ready. "
+                f"Failed: {', '.join(failed)}"
+            )
+            return n_ok > 0
+
+    except ImportError:
+        st.error("❌ gdown not installed — add 'gdown' to requirements.txt")
+        return False
+    except Exception as e:
+        st.error(f"❌ Download failed: {e}")
+        return False
+
+_weights_ready = _download_weights_on_startup()
 
 # ── Load saved models ─────────────────────────────────────────────────
 # ── Demo mode: synthetic model for Streamlit Cloud (no weights) ──────
