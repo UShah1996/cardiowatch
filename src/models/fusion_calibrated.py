@@ -345,18 +345,31 @@ class CalibratedFusion:
             print(f"WARNING: {path} not found. Using hardcoded weights (0.6/0.4).")
             return CalibratedFusion()
 
-        # Register classes in sys.modules so pickle can find them
-        # regardless of whether this file is run as __main__ or as a module.
+        import pickle
         import sys
-        import src.models.fusion_calibrated as _self_module
-        sys.modules.setdefault('src.models.fusion_calibrated', _self_module)
-        # Also register under __main__ in case the pkl was saved that way
-        _self_module.IsotonicCalibrator = IsotonicCalibrator
-        _self_module.CalibratedFusion   = CalibratedFusion
 
-        model = joblib.load(path)
-        print(f"Fusion model loaded ← {path}")
-        return model
+        # Custom unpickler that remaps any module path to the current one.
+        # Handles pkl saved as __main__, src.models.fusion_calibrated,
+        # or any other path — works across Python versions and environments.
+        class _Remapper(pickle.Unpickler):
+            _CLASS_MAP = {
+                'IsotonicCalibrator': IsotonicCalibrator,
+                'CalibratedFusion':   CalibratedFusion,
+            }
+
+            def find_class(self, module, name):
+                if name in self._CLASS_MAP:
+                    return self._CLASS_MAP[name]
+                return super().find_class(module, name)
+
+        try:
+            with open(path, 'rb') as f:
+                model = _Remapper(f).load()
+            print(f"Fusion model loaded ← {path}")
+            return model
+        except Exception as e:
+            print(f"WARNING: Could not load fusion model ({e}). Using hardcoded weights.")
+            return CalibratedFusion()
 
 
 # ── Demographic helpers ───────────────────────────────────────────────
