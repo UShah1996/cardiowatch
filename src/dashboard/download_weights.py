@@ -51,7 +51,7 @@ def ensure_weights(log_fn=print) -> dict:
         log_fn(f"Downloading {name}...")
         try:
             url = f'https://drive.google.com/uc?id={fid}'
-            gdown.download(url, dest, quiet=False, fuzzy=True)
+            gdown.download(url, dest, quiet=False)
 
             size = os.path.getsize(dest) if os.path.exists(dest) else 0
             if size > 10_000:
