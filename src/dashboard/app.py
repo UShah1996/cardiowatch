@@ -16,6 +16,17 @@ import joblib
 import torch
 from collections import deque
 
+# ── Weight download (Streamlit Cloud) ────────────────────────────────
+from src.dashboard.download_weights import ensure_weights
+ 
+@st.cache_resource
+def _download_weights_once():
+    """Download weights from Google Drive on first load only."""
+    ensure_weights()
+ 
+# Call before load_models() — downloads missing weights, no-op if present
+_download_weights_once()
+
 # ── Page config ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title="CardioWatch",
