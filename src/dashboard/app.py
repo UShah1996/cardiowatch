@@ -26,50 +26,53 @@ st.set_page_config(
 )
 
 # ── Weight download (Streamlit Cloud) ────────────────────────────────
-# ── Weight download (Streamlit Cloud) ────────────────────────────────
 import os
 
 def _download_weights_on_startup():
     PROCESSED_DIR = 'data/processed'
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-    # Already downloaded — skip
-    if os.path.exists(f'{PROCESSED_DIR}/rf_model.pkl') and \
-       os.path.getsize(f'{PROCESSED_DIR}/rf_model.pkl') > 10_000:
+    # Already downloaded — check all critical files
+    critical = ['rf_model.pkl', 'scaler.pkl', 'xgb_model.pkl']
+    if all(
+        os.path.exists(f'{PROCESSED_DIR}/{f}') and
+        os.path.getsize(f'{PROCESSED_DIR}/{f}') > 500
+        for f in critical
+    ):
         return True
 
     status_container = st.empty()
-    status_container.info("⏳ Downloading model weights (first load only — ~2 min)...")
+    status_container.info("⏳ Downloading model weights from Hugging Face (first load only — ~2 min)...")
 
     try:
-        import gdown
-        from src.dashboard.download_weights import WEIGHTS
+        from huggingface_hub import hf_hub_download
+        from src.dashboard.download_weights import WEIGHTS, REPO_ID
 
         progress = st.progress(0)
         results  = {}
 
-        for i, (name, fid) in enumerate(WEIGHTS.items()):
+        for i, name in enumerate(WEIGHTS):
             dest = os.path.join(PROCESSED_DIR, name)
-            if os.path.exists(dest) and os.path.getsize(dest) > 10_000:
+            if os.path.exists(dest) and os.path.getsize(dest) > 500:
                 results[name] = True
                 progress.progress((i + 1) / len(WEIGHTS))
                 continue
 
             status_container.info(f"⏳ Downloading {name} ({i+1}/{len(WEIGHTS)})...")
             try:
-                gdown.download(
-                    f'https://drive.google.com/uc?id={fid}',
-                    dest, quiet=False, fuzzy=True
+                hf_hub_download(
+                    repo_id=REPO_ID,
+                    filename=name,
+                    local_dir=PROCESSED_DIR,
+                    local_dir_use_symlinks=False,
                 )
                 size = os.path.getsize(dest) if os.path.exists(dest) else 0
-                if size > 10_000:
+                if size > 500:
                     results[name] = True
                 else:
-                    st.error(
-                        f"❌ {name} is {size} bytes — likely a Drive permission error. "
-                        f"Set file sharing to 'Anyone with the link'."
-                    )
-                    if os.path.exists(dest): os.remove(dest)
+                    st.error(f"❌ {name} downloaded but too small ({size} bytes)")
+                    if os.path.exists(dest):
+                        os.remove(dest)
                     results[name] = False
             except Exception as e:
                 st.error(f"❌ {name} failed: {e}")
@@ -91,13 +94,14 @@ def _download_weights_on_startup():
             return n_ok > 0
 
     except ImportError:
-        st.error("❌ gdown not installed — add 'gdown' to requirements.txt")
+        st.error("❌ huggingface_hub not installed — add it to requirements.txt")
         return False
     except Exception as e:
         st.error(f"❌ Download failed: {e}")
         return False
 
 _weights_ready = _download_weights_on_startup()
+
 
 # ── Load saved models ─────────────────────────────────────────────────
 # ── Demo mode: synthetic model for Streamlit Cloud (no weights) ──────
@@ -137,7 +141,15 @@ def load_models():
     Loads CalibratedFusion if fusion_model.pkl exists.
     Falls back to demo mode if weights are not present (Streamlit Cloud).
     """
-    DEMO = not os.path.exists('data/processed/rf_model.pkl')
+    CRITICAL = [
+        'data/processed/rf_model.pkl',
+        'data/processed/scaler.pkl',
+        'data/processed/xgb_model.pkl',
+    ]
+    DEMO = not all(
+        os.path.exists(p) and os.path.getsize(p) > 500
+        for p in CRITICAL
+    )
 
     if DEMO:
         import numpy as np

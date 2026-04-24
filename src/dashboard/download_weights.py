@@ -1,27 +1,29 @@
 """
-download_weights.py — Google Drive weight downloader for CardioWatch
-Pure Python — no Streamlit dependency.
-Called from app.py which handles all UI feedback.
+download_weights.py — Hugging Face Hub weight downloader for CardioWatch
+No download limits, no virus-scan quotas, designed for ML model weights.
+
+Repo: https://huggingface.co/UShah1996/cardiowatch-weights
 """
 
 import os
 
-WEIGHTS = {
-    'cnn_lstm_combined_best.pt': '1iB6P4s6Gkgf3x2L1_9tcW6jExssLsNzA',
-    'cnn_lstm_cv_best.pt':       '1boR7-dcItAgIRL2w8LgHfjnwrTBgSNj6',
-    'fusion_model.pkl':          '1H060iL9aiH2e-7ocOo8xR1DeWIgXUbYx',
-    'rf_model.pkl':              '1EYmVToWFHujQIfK34Bsr6DdCrsskTycL',
-    'rr_rf_model.pkl':           '18Vci8UkVERR8yBvZpcwW0CGgfjYHDv1C',
-    'scaler.pkl':                '1R2a79B2VEVAgvurDrWE4Xw1oXwfReEhn',
-    'xgb_model.pkl':             '17WakvbrNXUR8bnhrheWV4XSoSh5mzdcS',
-}
-
+REPO_ID       = 'UShah1996/cardiowatch-weights'
 PROCESSED_DIR = 'data/processed'
+
+WEIGHTS = [
+    'cnn_lstm_combined_best.pt',
+    'cnn_lstm_cv_best.pt',
+    'fusion_model.pkl',
+    'rf_model.pkl',
+    'rr_rf_model.pkl',
+    'scaler.pkl',
+    'xgb_model.pkl',
+]
 
 
 def ensure_weights(log_fn=print) -> dict:
     """
-    Download any missing model weights from Google Drive using gdown.
+    Download any missing model weights from Hugging Face Hub.
     Skips files that already exist and are non-empty (idempotent).
 
     Args:
@@ -32,47 +34,46 @@ def ensure_weights(log_fn=print) -> dict:
         dict {filename: True/False} — True if file is ready
     """
     try:
-        import gdown
+        from huggingface_hub import hf_hub_download
     except ImportError:
-        log_fn("gdown not installed — add 'gdown' to requirements.txt")
+        log_fn("huggingface_hub not installed — add 'huggingface_hub' to requirements.txt")
         return {name: False for name in WEIGHTS}
 
     os.makedirs(PROCESSED_DIR, exist_ok=True)
     results = {}
 
-    for name, fid in WEIGHTS.items():
+    for name in WEIGHTS:
         dest = os.path.join(PROCESSED_DIR, name)
 
-        if os.path.exists(dest) and os.path.getsize(dest) > 10_000:
-            log_fn(f"✓ {name} already present")
+        if os.path.exists(dest) and os.path.getsize(dest) > 500:
+            log_fn(f'✓ {name} already present')
             results[name] = True
             continue
 
-        log_fn(f"Downloading {name}...")
+        log_fn(f'Downloading {name}...')
         try:
-            url = f'https://drive.google.com/uc?id={fid}'
-            gdown.download(url, dest, quiet=False)
-
+            hf_hub_download(
+                repo_id=REPO_ID,
+                filename=name,
+                local_dir=PROCESSED_DIR,
+                local_dir_use_symlinks=False,
+            )
             size = os.path.getsize(dest) if os.path.exists(dest) else 0
-            if size > 10_000:
-                log_fn(f"✓ {name} ({size // 1024} KB)")
+            if size > 500:
+                log_fn(f'✓ {name} ({size // 1024} KB)')
                 results[name] = True
             else:
-                log_fn(
-                    f"✗ {name} only {size} bytes — "
-                    f"Google Drive permission error. "
-                    f"Set sharing to 'Anyone with the link'."
-                )
+                log_fn(f'✗ {name} — downloaded but too small ({size} bytes)')
                 if os.path.exists(dest):
                     os.remove(dest)
                 results[name] = False
 
         except Exception as e:
-            log_fn(f"✗ {name} failed: {e}")
+            log_fn(f'✗ {name} failed: {e}')
             if os.path.exists(dest):
                 os.remove(dest)
             results[name] = False
 
     n_ok = sum(results.values())
-    log_fn(f"Weights ready: {n_ok}/{len(results)}")
+    log_fn(f'Weights ready: {n_ok}/{len(results)}')
     return results

@@ -31,5 +31,5 @@ neurokit2==0.2.9
 # Config parsing
 pyyaml>=6.0
 
-# Google Drive downloader — pin to version that does NOT have fuzzy param issues
-gdown==4.6.3
+#Weights upload
+huggingface_hub
