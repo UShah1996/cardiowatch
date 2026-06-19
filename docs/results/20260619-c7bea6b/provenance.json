@@ -1,0 +1,18 @@
+{
+  "cwd": "/fs/atipa/home/019107595/cardiowatch",
+  "env": {
+    "CARDIOWATCH_RUN_ID": "20260619-c7bea6b",
+    "CUDA_VISIBLE_DEVICES": null,
+    "SLURM_JOB_ID": "50310",
+    "SLURM_JOB_NAME": "cardiowatch-08-tables",
+    "SLURM_NODELIST": "c19"
+  },
+  "git_sha": "d538e9f4bfa2faae7fd0994526e5ad208299f213",
+  "git_short_sha": "d538e9f",
+  "hostname": "c19.hpc.coe",
+  "platform": "Linux-5.14.0-611.54.1.el9_7.x86_64-x86_64-with-glibc2.34",
+  "python": "3.9.25",
+  "run_id": "20260619-c7bea6b",
+  "stage": "result_tables",
+  "timestamp_utc": "2026-06-19T16:52:43.270847+00:00"
+}

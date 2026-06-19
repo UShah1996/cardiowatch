@@ -1,0 +1,34 @@
+{
+  "cv_auc": [
+    0.9542693724323559,
+    0.9628582251940341,
+    0.9481460793701457,
+    0.949688796680498,
+    0.944142993935525
+  ],
+  "cv_f1": [
+    0.7582089552238805,
+    0.7955801104972375,
+    0.7764705882352941,
+    0.7635327635327636,
+    0.7405247813411079
+  ],
+  "cv_recall": [
+    0.8141025641025641,
+    0.9171974522292994,
+    0.8461538461538461,
+    0.8589743589743589,
+    0.8141025641025641
+  ],
+  "fixed_threshold": 0.4,
+  "legacy_model_path": "data/processed/rr_rf_model.pkl",
+  "manifest": "docs/results/20260619-c7bea6b/manifests/cpsc_holdout.json",
+  "manifest_holdout_sha256": "f338fd3bfa6d35314a013757f3a2f6cf59dc34f15e347aff0d93b9e8deafa9cc",
+  "matched_specificity": 0.9,
+  "matched_specificity_threshold": 0.45344937686087017,
+  "model": "RR+RF CPSC complement",
+  "model_path": "data/processed/rr_rf_cpsc_complement.pkl",
+  "n_train_feature_rows": 4397,
+  "n_validation_rows": 1100,
+  "validation_auc": 0.9583032327975439
+}

@@ -1,0 +1,16 @@
+{
+  "accuracy": 0.9074074074074074,
+  "accuracy_wilson_ci": [
+    0.8009011740903732,
+    0.9597988652429706
+  ],
+  "cnn_on_afib_mean": 0.9392494559288025,
+  "cnn_on_normal_mean": 0.18250933913338296,
+  "dataset": "Apple Watch personal exports",
+  "device": "Apple Watch (512 Hz, consumer)",
+  "ground_truth_note": "Labels are Apple Watch's on-device classifier output, not independent clinical adjudication.",
+  "model": "cnn_lstm (best available checkpoint)",
+  "n": 54,
+  "n_afib": 1,
+  "threshold": 0.5
+}

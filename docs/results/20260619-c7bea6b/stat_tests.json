@@ -1,0 +1,223 @@
+{
+  "comparisons": {
+    "cnn_combined_deploy_vs_random_baseline": {
+      "delong": {
+        "auc_a": 0.9752324335283554,
+        "auc_b": 0.5017667844522968,
+        "ci_high": 0.5142324697786516,
+        "ci_low": 0.43269882837346557,
+        "delta_auc": 0.4734656490760586,
+        "method": "paired DeLong",
+        "p_value": 1.0666243493154046e-114,
+        "var_delta": 0.00043263086961766914,
+        "z": 22.763011785388755
+      },
+      "holm_note": "sanity floor \u2014 not in Holm family",
+      "in_holm_family": false,
+      "mcnemar_fixed": {
+        "accuracy_diff": 0.4265988372093023,
+        "b": 633,
+        "c": 46,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 13.623655913978494,
+        "odds_ratio_ci_high": 18.349422827461098,
+        "odds_ratio_ci_low": 10.114977577644181,
+        "p_value": 5.3646831665349135e-112,
+        "statistic": 505.7378497790869
+      }
+    },
+    "cnn_cpsc_vs_cnn_combined_deploy": {
+      "delong": {
+        "auc_a": 0.9486329143254358,
+        "auc_b": 0.9752324335283554,
+        "ci_high": -0.013245481183820912,
+        "ci_low": -0.03995355722201826,
+        "delta_auc": -0.026599519202919586,
+        "method": "paired DeLong",
+        "p_value": 9.461767793771456e-05,
+        "p_value_holm": 0.00028385303381314367,
+        "var_delta": 4.642255448759692e-05,
+        "z": -3.9039951488263567
+      },
+      "in_holm_family": true,
+      "mcnemar_fixed": {
+        "accuracy_diff": -0.08212209302325581,
+        "b": 26,
+        "c": 139,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 0.18996415770609318,
+        "odds_ratio_ci_high": 0.2877729748617911,
+        "odds_ratio_ci_low": 0.12539878433795482,
+        "p_value": 2.802035500755168e-18,
+        "p_value_holm": 1.681221300453101e-17,
+        "statistic": 76.02424242424243
+      },
+      "mcnemar_matched_specificity": {
+        "accuracy_diff": -0.025436046511627907,
+        "b": 46,
+        "c": 81,
+        "holm_note": "sensitivity analysis \u2014 not in Holm family",
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 0.5705521472392638,
+        "odds_ratio_ci_high": 0.8179609357313516,
+        "odds_ratio_ci_low": 0.3979771386371567,
+        "p_value": 0.0025527959476842003,
+        "statistic": 9.10236220472441
+      }
+    },
+    "cnn_cpsc_vs_random_baseline": {
+      "delong": {
+        "auc_a": 0.9486329143254358,
+        "auc_b": 0.5017667844522968,
+        "ci_high": 0.49066868866872926,
+        "ci_low": 0.40306357107754875,
+        "delta_auc": 0.446866129873139,
+        "method": "paired DeLong",
+        "p_value": 6.0618757744005425e-89,
+        "var_delta": 0.0004994623778615568,
+        "z": 19.995213625518264
+      },
+      "holm_note": "sanity floor \u2014 not in Holm family",
+      "in_holm_family": false,
+      "mcnemar_fixed": {
+        "accuracy_diff": 0.3444767441860465,
+        "b": 580,
+        "c": 106,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 5.450704225352113,
+        "odds_ratio_ci_high": 6.701679956785434,
+        "odds_ratio_ci_low": 4.4332431187183,
+        "p_value": 6.675449556569247e-73,
+        "statistic": 326.13556851311955
+      }
+    },
+    "rr_rf_vs_cnn_combined_deploy": {
+      "delong": {
+        "auc_a": 0.9351738544864742,
+        "auc_b": 0.9752324335283554,
+        "ci_high": -0.026735422392365354,
+        "ci_low": -0.05338173569139716,
+        "delta_auc": -0.04005857904188126,
+        "method": "paired DeLong",
+        "p_value": 3.792446740042158e-09,
+        "p_value_holm": 1.516978696016863e-08,
+        "var_delta": 4.620809733825695e-05,
+        "z": -5.893000754951798
+      },
+      "in_holm_family": true,
+      "mcnemar_fixed": {
+        "accuracy_diff": -0.07122093023255814,
+        "b": 58,
+        "c": 156,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 0.3738019169329074,
+        "odds_ratio_ci_high": 0.5047608285988624,
+        "odds_ratio_ci_low": 0.27681996142723486,
+        "p_value": 3.339097058286608e-11,
+        "p_value_holm": 1.669548529143304e-10,
+        "statistic": 43.967289719626166
+      },
+      "mcnemar_matched_specificity": {
+        "accuracy_diff": -0.03924418604651163,
+        "b": 91,
+        "c": 145,
+        "holm_note": "sensitivity analysis \u2014 not in Holm family",
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 0.6288659793814433,
+        "odds_ratio_ci_high": 0.81682763898976,
+        "odds_ratio_ci_low": 0.4841565112959402,
+        "p_value": 0.0005605738016135268,
+        "statistic": 11.902542372881356
+      }
+    },
+    "rr_rf_vs_cnn_cpsc": {
+      "delong": {
+        "auc_a": 0.9351738544864742,
+        "auc_b": 0.9486329143254358,
+        "ci_high": 0.005536198830681776,
+        "ci_low": -0.032454318508605126,
+        "delta_auc": -0.013459059838961673,
+        "method": "paired DeLong",
+        "p_value": 0.1649150766215126,
+        "p_value_holm": 0.3298301532430252,
+        "var_delta": 9.392781981233551e-05,
+        "z": -1.3887293144521045
+      },
+      "in_holm_family": true,
+      "mcnemar_fixed": {
+        "accuracy_diff": 0.010901162790697675,
+        "b": 147,
+        "c": 132,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 1.1132075471698113,
+        "odds_ratio_ci_high": 1.4075452378995226,
+        "odds_ratio_ci_low": 0.8804200459838364,
+        "p_value": 0.4019419292042633,
+        "p_value_holm": 0.4019419292042633,
+        "statistic": 0.7025089605734767
+      },
+      "mcnemar_matched_specificity": {
+        "accuracy_diff": -0.013808139534883721,
+        "b": 118,
+        "c": 137,
+        "holm_note": "sensitivity analysis \u2014 not in Holm family",
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 0.8618181818181818,
+        "odds_ratio_ci_high": 1.1018236005968756,
+        "odds_ratio_ci_low": 0.6740920943334736,
+        "p_value": 0.259656356370447,
+        "statistic": 1.2705882352941176
+      }
+    },
+    "rr_rf_vs_random_baseline": {
+      "delong": {
+        "auc_a": 0.9351738544864742,
+        "auc_b": 0.5017667844522968,
+        "ci_high": 0.4752110676553833,
+        "ci_low": 0.3916030724129714,
+        "delta_auc": 0.43340707003417733,
+        "method": "paired DeLong",
+        "p_value": 8.53674698141397e-92,
+        "var_delta": 0.00045492462595187166,
+        "z": 20.320119994483708
+      },
+      "holm_note": "sanity floor \u2014 not in Holm family",
+      "in_holm_family": false,
+      "mcnemar_fixed": {
+        "accuracy_diff": 0.3553779069767442,
+        "b": 578,
+        "c": 89,
+        "method": "chi-square continuity-corrected",
+        "n": 1376,
+        "odds_ratio": 6.4636871508379885,
+        "odds_ratio_ci_high": 8.075450017194711,
+        "odds_ratio_ci_low": 5.173612801137934,
+        "p_value": 1.2435727674424076e-79,
+        "statistic": 357.03748125937034
+      }
+    }
+  },
+  "holm_family": [
+    "rr_rf_vs_cnn_cpsc:delong",
+    "rr_rf_vs_cnn_cpsc:mcnemar_fixed",
+    "rr_rf_vs_cnn_combined_deploy:delong",
+    "rr_rf_vs_cnn_combined_deploy:mcnemar_fixed",
+    "cnn_cpsc_vs_cnn_combined_deploy:delong",
+    "cnn_cpsc_vs_cnn_combined_deploy:mcnemar_fixed"
+  ],
+  "holm_family_size": 6,
+  "notes": [
+    "Holm correction is applied ONLY across DeLong + fixed-threshold McNemar for the model-vs-model pairs (pre-registered family).",
+    "Matched-specificity McNemar and random_baseline comparisons are reported raw as sensitivity / sanity analyses, outside the correction family.",
+    "This file is the canonical source for corrected p-values; paired_cpsc_predictions.json carries raw stats only."
+  ],
+  "primary_endpoint": "rr_rf_vs_cnn_cpsc"
+}

@@ -1,0 +1,51 @@
+{
+  "caveats": [
+    "afdb are selected AFib patients, not a general screening population.",
+    "Few records -> wide CIs; treat as exploratory early-warning evidence.",
+    "Threshold set at fixed control specificity on out-of-fold scores.",
+    "Prediction uses RR/HRV features on SINUS windows only (no AFib morphology)."
+  ],
+  "dataset": "MIT-BIH AFib (afdb), record-grouped CV",
+  "exploratory": true,
+  "false_alarms_per_hour": 1.1222222222222222,
+  "far_min": 60.0,
+  "horizon_min": 30.0,
+  "k_sustained": 2,
+  "lead_time_iqr_min": [
+    8.144333333333334,
+    28.31386666666667
+  ],
+  "lead_time_median_min": 19.967133333333333,
+  "lead_times_min": [
+    2.884133333333333,
+    29.151533333333337,
+    24.534266666666667,
+    24.314466666666664,
+    19.8272,
+    8.144333333333334,
+    29.26086666666667,
+    4.1822,
+    28.31386666666667,
+    11.566666666666666,
+    19.967133333333333,
+    1.8235999999999999,
+    29.2264
+  ],
+  "n_control_windows": 10800,
+  "n_preonset_windows": 4068,
+  "n_records": 21,
+  "n_windows": 14868,
+  "onset_sensitivity": 0.04814814814814815,
+  "onset_sensitivity_wilson_ci": [
+    0.028350915878327814,
+    0.08062257173456762
+  ],
+  "onsets_total": 270,
+  "onsets_warned": 13,
+  "operating_threshold": 0.7013437970137246,
+  "stride_sec": 30.0,
+  "target_control_specificity": 0.95,
+  "task": "AFib onset prediction (pre-onset sinus -> AFib within horizon)",
+  "window_auc_grouped_cv": 0.5402562798171819,
+  "window_sec": 30.0
+}

@@ -1,0 +1,57 @@
+{
+  "note": "Clinical (tabular) cohort is distinct from the ECG cohorts; do not read these rows as a cross-modal ablation.",
+  "rows": [
+    {
+      "dataset": "Kaggle clinical test split",
+      "metrics": {
+        "accuracy": 0.9021739130434783,
+        "accuracy_wilson_ci": [
+          0.8244322048381333,
+          0.9476762429103883
+        ],
+        "auc": 0.9540889526542324,
+        "balanced_accuracy": 0.8974175035868006,
+        "confusion_matrix": {
+          "fn": 3,
+          "fp": 6,
+          "tn": 35,
+          "tp": 48
+        },
+        "f1": 0.9142857142857143,
+        "n": 92,
+        "npv": 0.9210526315789473,
+        "ppv": 0.8888888888888888,
+        "recall": 0.9411764705882353,
+        "specificity": 0.8536585365853658,
+        "threshold": 0.5
+      },
+      "model": "random_forest"
+    },
+    {
+      "dataset": "Kaggle clinical test split",
+      "metrics": {
+        "accuracy": 0.8152173913043478,
+        "accuracy_wilson_ci": [
+          0.7238594289322428,
+          0.8813066517355174
+        ],
+        "auc": 0.9273075083692014,
+        "balanced_accuracy": 0.7974653275944524,
+        "confusion_matrix": {
+          "fn": 2,
+          "fp": 15,
+          "tn": 26,
+          "tp": 49
+        },
+        "f1": 0.8521739130434782,
+        "n": 92,
+        "npv": 0.9285714285714286,
+        "ppv": 0.765625,
+        "recall": 0.9607843137254902,
+        "specificity": 0.6341463414634146,
+        "threshold": 0.20999999999999996
+      },
+      "model": "xgboost"
+    }
+  ]
+}
