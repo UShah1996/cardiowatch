@@ -27,6 +27,7 @@ from sklearn.metrics import (recall_score, precision_score, f1_score,
                              roc_auc_score, confusion_matrix,
                              classification_report)
 from src.models.rr_afib_detector import extract_rr_features
+from src.evaluation.confidence_intervals import wilson_ci
 
 MIT_DIR       = 'data/raw/mit_afib/files'
 MODEL_PATH    = 'data/processed/rr_rf_model.pkl'
@@ -236,10 +237,19 @@ def evaluate():
     except Exception:
         print("AUC-ROC:   N/A (need both classes)")
 
-    print(f"Recall:    {recall_score(all_labels, all_preds, zero_division=0):.3f}")
+    # Wilson 95% CIs on the proportion metrics (recall over positives,
+    # accuracy over all windows) — large n here, but report for consistency.
+    n_total   = len(all_labels)
+    n_pos     = sum(all_labels)
+    n_tp      = sum(1 for l, p in zip(all_labels, all_preds) if l == 1 and p == 1)
+    n_correct = sum(1 for l, p in zip(all_labels, all_preds) if l == p)
+    rec, rec_lo, rec_hi = wilson_ci(n_tp, n_pos) if n_pos else (0.0, 0.0, 0.0)
+    acc, acc_lo, acc_hi = wilson_ci(n_correct, n_total)
+
+    print(f"Recall:    {rec:.3f}  (95% CI: {rec_lo:.3f}–{rec_hi:.3f}, Wilson)")
     print(f"Precision: {precision_score(all_labels, all_preds, zero_division=0):.3f}")
     print(f"F1:        {f1_score(all_labels, all_preds, zero_division=0):.3f}")
-    print(f"Accuracy:  {sum(l==p for l,p in zip(all_labels,all_preds))/len(all_labels):.3f}")
+    print(f"Accuracy:  {acc:.3f}  (95% CI: {acc_lo:.3f}–{acc_hi:.3f}, Wilson)")
 
     print("\nConfusion matrix (rows=actual, cols=predicted):")
     cm = confusion_matrix(all_labels, all_preds)
@@ -253,9 +263,11 @@ def evaluate():
     print(f"{'Dataset':<28} | {'Device':<22} | {'Result'}")
     print('-'*65)
     print(f"{'CPSC 2018 (5-fold CV)':<28} | {'Hospital 12-lead 500Hz':<22} | AUC=0.957")
-    print(f"{'Apple Watch (54 personal)':<28} | {'Wearable 512Hz 4 people':<22} | 49/54=90.7%")
+    aw_p, aw_lo, aw_hi = wilson_ci(49, 54)
+    print(f"{'Apple Watch (54 personal)':<28} | {'Wearable 512Hz 4 people':<22} | "
+          f"49/54={aw_p:.0%} (95% CI {aw_lo:.0%}–{aw_hi:.0%})")
     try:
-        auc_str = f"AUC={auc:.3f}"
+        auc_str = f"AUC={auc:.3f} | Acc {acc:.0%} (CI {acc_lo:.0%}–{acc_hi:.0%})"
     except Exception:
         auc_str = "see above"
     print(f"{'MIT-BIH AFib (25 patients)':<28} | {'Holter 250Hz ambulatory':<22} | {auc_str}")

@@ -40,6 +40,7 @@ from src.models.cnn_lstm import build_model
 from src.models.fusion_calibrated import (
     CalibratedFusion, IsotonicCalibrator, build_fusion_from_apple_watch
 )
+from src.evaluation.confidence_intervals import wilson_ci
 
 # ── Config ────────────────────────────────────────────────────────────
 AW_BASE_DIR   = 'data/apple_health_export'
@@ -311,6 +312,16 @@ def build_apple_watch_fusion() -> CalibratedFusion:
             'recordings': file_log,
         }, f, indent=2)
     print(f"\nScoring results saved → {results_path}")
+
+    # ── CNN-LSTM binary accuracy on Apple Watch (threshold 0.5) ───────
+    cnn_preds = (ecg_probs >= 0.5).astype(int)
+    n_correct = int((cnn_preds == labels).sum())
+    acc, acc_lo, acc_hi = wilson_ci(n_correct, n_total)
+    print(f"\nCNN-LSTM Apple Watch accuracy: {n_correct}/{n_total} = {acc:.1%}  "
+          f"(95% CI: {acc_lo:.1%}–{acc_hi:.1%}, Wilson)")
+    print(f"  NOTE: only {n_afib} positive (AFib) recording(s) — the upper "
+          f"bound on sensitivity CI is wide; accuracy is dominated by the "
+          f"non-AFib majority class.")
 
     # ── Compute discrimination metrics ────────────────────────────────
     afib_cnn    = ecg_probs[labels == 1]
