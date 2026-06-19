@@ -20,7 +20,7 @@ RESULTS_ROOT = Path("docs/results")
 
 def git_sha(short: bool = False) -> str:
     try:
-        args = ["git", "rev-parse", "--short" if short else "HEAD"]
+        args = ["git", "rev-parse", "--short", "HEAD"] if short else ["git", "rev-parse", "HEAD"]
         return subprocess.check_output(args, text=True).strip()
     except Exception:
         return "unknown"
@@ -104,4 +104,3 @@ def write_run_metadata(run_id: str | None = None, extra: dict[str, Any] | None =
     if freeze:
         (out_dir / "requirements.lock").write_text("\n".join(freeze) + "\n")
     return out_dir
-
