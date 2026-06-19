@@ -53,6 +53,112 @@ from src.models.rr_afib_detector import extract_rr_features
 AFIB_LABEL = "AFIB"
 
 
+# ── feature extraction ────────────────────────────────────────────────
+def _neurokit_features(signal: np.ndarray, fs: int, pwave: bool = False) -> dict[str, float]:
+    """
+    Pre-AFib markers via neurokit2: atrial-ectopy burden, expanded HRV
+    (time + nonlinear; frequency-domain skipped — unreliable on short
+    windows), and optional P-wave indices (delineation is expensive).
+    Robust: returns whatever it can compute, {} on failure. Non-finite
+    values are zeroed so they never poison the feature matrix.
+    """
+    try:
+        import neurokit2 as nk
+    except Exception:
+        return {}
+    out: dict[str, float] = {}
+    try:
+        sig = nk.ecg_clean(np.asarray(signal, dtype=float), sampling_rate=fs)
+        _, info = nk.ecg_peaks(sig, sampling_rate=fs)
+        rpeaks = np.asarray(info.get("ECG_R_Peaks", []))
+    except Exception:
+        return {}
+    if len(rpeaks) < 6:
+        return {}
+    n_beats = float(len(rpeaks))
+
+    # Atrial ectopy / PAC proxy (Kubios artifact classes).
+    try:
+        artifacts, _ = nk.signal_fixpeaks(
+            rpeaks, sampling_rate=fs, iterative=True, method="kubios")
+        out["nk_ectopic_frac"] = len(artifacts.get("ectopic", [])) / n_beats
+        out["nk_longshort_frac"] = len(artifacts.get("longshort", [])) / n_beats
+        out["nk_extra_frac"] = len(artifacts.get("extra", [])) / n_beats
+    except Exception:
+        pass
+
+    # HRV time-domain + nonlinear.
+    for fn, cols in (
+        (getattr(__import__("neurokit2"), "hrv_time", None),
+         ["HRV_SDNN", "HRV_RMSSD", "HRV_pNN50", "HRV_pNN20", "HRV_CVNN", "HRV_MadNN", "HRV_IQRNN"]),
+        (getattr(__import__("neurokit2"), "hrv_nonlinear", None),
+         ["HRV_SD1", "HRV_SD2", "HRV_SD1SD2", "HRV_SampEn", "HRV_ApEn", "HRV_DFA_alpha1"]),
+    ):
+        if fn is None:
+            continue
+        try:
+            df = fn(rpeaks, sampling_rate=fs, show=False)
+            for c in cols:
+                if c in df.columns:
+                    out["nk_" + c[4:].lower()] = float(df[c].iloc[0])
+        except Exception:
+            continue
+
+    # P-wave indices (optional — delineation is the slow part).
+    if pwave:
+        try:
+            _, waves = nk.ecg_delineate(sig, rpeaks, sampling_rate=fs, method="dwt")
+            p_on = np.array(waves.get("ECG_P_Onsets", []), dtype=float)
+            p_off = np.array(waves.get("ECG_P_Offsets", []), dtype=float)
+            p_pk = np.array(waves.get("ECG_P_Peaks", []), dtype=float)
+            m = min(len(p_on), len(p_off))
+            if m:
+                dur = (p_off[:m] - p_on[:m]) / fs * 1000.0
+                dur = dur[np.isfinite(dur) & (dur > 0) & (dur < 300)]
+                if dur.size:
+                    out["nk_pwave_dur_ms"] = float(np.mean(dur))
+                    out["nk_pwave_dur_std"] = float(np.std(dur))
+            out["nk_pwave_presence"] = float(np.isfinite(p_pk).sum() / n_beats)
+        except Exception:
+            pass
+
+    return {k: (v if np.isfinite(v) else 0.0) for k, v in out.items()}
+
+
+def extract_features(signal: np.ndarray, fs: int, mode: str = "rr",
+                     pwave: bool = False) -> dict[str, float] | None:
+    """Base RR/HRV features, optionally augmented with neurokit2 markers."""
+    base = extract_rr_features(signal, fs=fs)
+    if base is None:
+        return None
+    if mode == "both":
+        base = {**base, **_neurokit_features(signal, fs, pwave=pwave)}
+    return base
+
+
+def normalize_per_patient(X: np.ndarray, groups: np.ndarray,
+                          y: np.ndarray) -> np.ndarray:
+    """
+    Z-score each feature within each patient using that patient's CONTROL
+    (label==0, far-from-onset sinus) windows as the personal baseline.
+    This models *deviation from the patient's own sinus*, which is what
+    precedes onset; it uses only control-window feature statistics (no
+    label leakage) and mirrors a real per-user calibration period.
+    Patients with no control windows are left unscaled.
+    """
+    Xn = X.astype(float).copy()
+    for g in np.unique(groups):
+        gm = groups == g
+        cm = gm & (y == 0)
+        if cm.sum() < 2:
+            continue
+        mu = Xn[cm].mean(axis=0)
+        sd = Xn[cm].std(axis=0)
+        sd[sd < 1e-8] = 1.0
+        Xn[gm] = (Xn[gm] - mu) / sd
+    return Xn
+
+
 # ── afdb parsing ──────────────────────────────────────────────────────
 def list_records(data_dir: str) -> list[str]:
     import os as _os
@@ -100,6 +206,7 @@ def afib_onsets(segments: list[tuple[int, str]]) -> list[int]:
 def build_record_windows(
     record_path: str, horizon_min: float, far_min: float,
     window_sec: float, stride_sec: float, source: str = "afdb",
+    feature_mode: str = "rr", pwave: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Slide windows over one record; label sinus windows by time to next onset.
@@ -136,7 +243,7 @@ def build_record_windows(
             label = 0
         else:
             continue  # ambiguous buffer
-        feats = extract_rr_features(sig[start:end], fs=fs)
+        feats = extract_features(sig[start:end], fs, mode=feature_mode, pwave=pwave)
         if feats is None:
             continue
         out.append({
@@ -250,7 +357,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         for rp in recs:
             rows.extend(build_record_windows(
                 rp, args.horizon_min, args.far_min,
-                args.window_sec, args.stride_sec, source=source))
+                args.window_sec, args.stride_sec, source=source,
+                feature_mode=args.features, pwave=args.pwave))
         print(f"  {source}: {len(recs)} records, {len(rows) - before} labeled windows")
         if len(rows) > before:
             used_sources.append(source)
@@ -258,10 +366,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if not rows:
         raise RuntimeError("No labeled windows built — check data dirs / annotations")
 
-    feat_names = sorted(rows[0]["features"].keys())
+    # Union of feature names — neurokit windows may yield partial key sets.
+    feat_names = sorted({k for r in rows for k in r["features"].keys()})
     X = np.array([[r["features"].get(k, 0.0) for k in feat_names] for r in rows], dtype=float)
     y = np.array([r["label"] for r in rows], dtype=int)
     groups = np.array([r["group"] for r in rows])
+    if args.normalize_per_patient:
+        X = normalize_per_patient(X, groups, y)
+        print("  applied per-patient baseline normalization (control-window stats)")
     n_groups = len(set(groups.tolist()))
     n_splits = min(args.folds, n_groups)
 
@@ -318,6 +430,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "dataset": f"pooled WFDB rhythm-annotated DBs: {', '.join(sorted(set(used_sources)))}; "
                    "patient(record)-grouped CV",
         "sources": sorted(set(used_sources)),
+        "feature_mode": args.features,
+        "pwave_features": bool(args.pwave),
+        "per_patient_normalized": bool(args.normalize_per_patient),
+        "n_features": len(feat_names),
         "horizon_min": args.horizon_min,
         "far_min": args.far_min,
         "window_sec": args.window_sec,
@@ -404,6 +520,15 @@ def _self_test() -> None:
     assert res["onsets_total"] == 1 and res["onsets_warned"] == 1
     # earliest warning is window index 5 -> ttom = 30 - 300/60 = 25 min
     assert abs(res["lead_times_min"][0] - 25.0) < 1e-6
+
+    # per-patient normalization: control windows of each patient -> mean 0.
+    Xt = np.array([[10.0], [12.0], [100.0], [102.0]])
+    gt = np.array(["a", "a", "b", "b"])
+    yt = np.array([0, 0, 0, 0])
+    Xn = normalize_per_patient(Xt, gt, yt)
+    assert abs(Xn[gt == "a"].mean()) < 1e-9 and abs(Xn[gt == "b"].mean()) < 1e-9
+    # huge between-patient offset removed -> both patients on the same scale
+    assert abs(Xn[0, 0] - Xn[2, 0]) < 1e-9
     print("afib_onset_prediction self-test passed")
 
 
@@ -421,6 +546,14 @@ def main() -> None:
     parser.add_argument("--stride-sec", type=float, default=30.0)
     parser.add_argument("--k-sustained", type=int, default=2)
     parser.add_argument("--target-specificity", type=float, default=0.95)
+    parser.add_argument("--features", choices=["rr", "both"], default="rr",
+                        help="'rr' = RR/HRV only (fast); 'both' adds neurokit2 "
+                             "ectopy + expanded HRV markers (slower)")
+    parser.add_argument("--pwave", action="store_true",
+                        help="add neurokit2 P-wave indices (delineation; slowest)")
+    parser.add_argument("--normalize-per-patient", action="store_true",
+                        help="z-score features within each patient using their "
+                             "control-window baseline (personalization)")
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out", default=None)

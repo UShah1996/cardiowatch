@@ -11,11 +11,13 @@
 
 ## Overview
 
-CardioWatch is an ML research project that explores whether **temporal patterns in cardiovascular data** can be used for the early detection of heart disease. Rather than predicting *whether* a patient has heart disease, this system aims to estimate **when** a cardiac event might be approaching — providing an early warning window to improve treatment outcomes.
+CardioWatch is an ML research project on **atrial fibrillation (AFib) detection from consumer-wearable ECG**. The goal is reliable, *device-agnostic* AFib detection on single-lead signals like the Apple Watch's — because undiagnosed AFib is a leading and **preventable cause of stroke**, and catching it on everyday wearables enables earlier anticoagulation. The life-saving pathway here is **AFib detection → stroke prevention.**
 
-The system combines structured clinical data with ECG time-series signals, processed through a multi-modal pipeline (Random Forest + XGBoost + CNN-LSTM + RR Traditional ML), and surfaced through a Streamlit risk dashboard with SHAP explainability and Apple Watch ECG integration.
+The system pairs single-lead ECG models (CNN-LSTM and a device-agnostic RR-interval model) with a clinical risk-factor model (Random Forest / XGBoost), surfaced through a Streamlit dashboard with SHAP explainability and Apple Watch ECG integration.
 
-The ECG component is specifically designed around **Atrial Fibrillation (AFib) detection using Lead I only** — the same single-lead signal that Apple Watch Series 4+ already records. Apple Watch explicitly states *"This app is not intended to detect a heart attack"* — CardioWatch addresses that gap by combining real-time ECG with clinical risk factors.
+The ECG component is built around **AFib detection using Lead I only** — the same single-lead signal Apple Watch Series 4+ records.
+
+> **Scope note — AFib, not heart attacks.** CardioWatch detects *atrial fibrillation* (a rhythm disorder), **not** heart attacks / myocardial infarction (a coronary-artery blockage) — these are distinct conditions with different ECG signatures, and Apple Watch likewise states its ECG "is not intended to detect a heart attack." An exploratory AFib *onset-prediction* (early-warning) analysis is included, but it shows only weak, short-lead signal on RR/HRV features and is **not** presented as a clinical early-warning claim. See [results](docs/results/) and the analysis plan.
 
 ---
 
@@ -188,7 +190,7 @@ Apple Watch preprocessing: skip first 5s (electrode placement artifact) + resamp
 
 Atrial Fibrillation is the world's most common serious arrhythmia, affecting ~37 million people and being a leading cause of stroke. Unlike most arrhythmias, AFib has two unmistakable electrical signatures visible in any single lead — absent P waves and irregular R-R intervals — making it reliably detectable from Lead I alone.
 
-Apple Watch received FDA clearance for AFib detection in 2018. CardioWatch extends this by adding clinical risk factors — filling the gap Apple explicitly leaves open for cardiac event prediction.
+Apple Watch received FDA clearance for AFib detection in 2018. CardioWatch's focus is making that single-lead AFib detection **robust across devices** (hospital, Holter, AliveCor, Apple Watch) — since the clinical value of catching AFib early is **stroke prevention through timely anticoagulation**. The clinical risk-factor model is reported as a separate cohort, not fused into a device-deployable risk score (see limitations).
 
 ---
 
