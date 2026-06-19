@@ -11,7 +11,9 @@ import numpy as np
 import yaml
 from xgboost import XGBClassifier
 from sklearn.model_selection import StratifiedKFold, cross_validate
-from sklearn.metrics import recall_score, f1_score, roc_auc_score
+from sklearn.metrics import recall_score, f1_score, roc_auc_score, fbeta_score, precision_score
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.over_sampling import SMOTE
 
 from src.preprocessing.clinical import full_pipeline
 from src.preprocessing.smote_balance import apply_smote
@@ -34,15 +36,30 @@ def build_xgb(config_path='configs/config.yaml'):
     )
 
 
-def tune_threshold(model, X_val, y_val):
-    """Find threshold that maximises recall on validation set."""
+def tune_threshold(model, X_val, y_val, beta=2.0):
+    """
+    Find the threshold that maximises F-beta on the validation set.
+
+    Maximising recall alone is not a valid selection criterion: recall
+    decreases monotonically with the threshold, so the search always
+    collapses to the lowest value in the grid (and, in the limit, to a
+    trivial all-positive classifier). F-beta balances recall against
+    precision; beta=2 weights recall twice as heavily as precision,
+    which is appropriate for a screening tool where missing a true case
+    is costlier than a false alarm — without the degenerate solution.
+    """
     probs = model.predict_proba(X_val)[:, 1]
-    best_t, best_recall = 0.5, 0
-    for t in np.arange(0.3, 0.7, 0.01):
-        r = recall_score(y_val, (probs >= t).astype(int), zero_division=0)
-        if r > best_recall:
-            best_recall, best_t = r, t
-    print(f'Best threshold: {best_t:.2f} | Recall: {best_recall:.3f}')
+    best_t, best_f = 0.5, -1.0
+    for t in np.arange(0.1, 0.9, 0.01):
+        preds = (probs >= t).astype(int)
+        f = fbeta_score(y_val, preds, beta=beta, zero_division=0)
+        if f > best_f:
+            best_f, best_t = f, t
+    preds_best = (probs >= best_t).astype(int)
+    r = recall_score(y_val, preds_best, zero_division=0)
+    p = precision_score(y_val, preds_best, zero_division=0)
+    print(f'Best threshold (F{beta:.0f}): {best_t:.2f} | '
+          f'F{beta:.0f}: {best_f:.3f} | Recall: {r:.3f} | Precision: {p:.3f}')
     return best_t
 
 
@@ -50,14 +67,18 @@ def train_and_evaluate():
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     (X_tr, X_val, X_te, y_tr, y_val, y_te), _ = full_pipeline()
-    X_res, y_res = apply_smote(X_tr, y_tr)
 
-    model = build_xgb()
-
-    # ── 5-fold cross-validation ───────────────────────────────────────
+    # ── 5-fold CV with SMOTE applied INSIDE each fold ─────────────────
+    # See random_forest.py: SMOTE-before-CV leaks synthetic samples from
+    # validation rows into training rows. The imblearn Pipeline resamples
+    # only each fold's training portion.
+    cv_pipeline = ImbPipeline([
+        ('smote', SMOTE(random_state=42, k_neighbors=5)),
+        ('xgb',   build_xgb()),
+    ])
     cv      = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     results = cross_validate(
-        model, X_res, y_res, cv=cv,
+        cv_pipeline, X_tr, y_tr, cv=cv,
         scoring=['recall', 'f1', 'roc_auc'],
         return_train_score=False
     )
@@ -70,7 +91,9 @@ def train_and_evaluate():
     # ── 95% CI on CV results ──────────────────────────────────────────
     cv_ci_report(results, model_name='XGBoost (5-fold CV)')
 
-    # ── Train final model ─────────────────────────────────────────────
+    # ── Train final model on full SMOTE training set ──────────────────
+    X_res, y_res = apply_smote(X_tr, y_tr)
+    model = build_xgb()
     model.fit(X_res, y_res)
 
     # ── Threshold tuning on validation set ───────────────────────────

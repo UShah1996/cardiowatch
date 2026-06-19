@@ -11,6 +11,8 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.metrics import recall_score, f1_score, roc_auc_score
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.over_sampling import SMOTE
 
 from src.preprocessing.clinical import full_pipeline
 from src.preprocessing.smote_balance import apply_smote
@@ -33,13 +35,20 @@ def train_and_evaluate():
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     (X_tr, X_val, X_te, y_tr, y_val, y_te), scaler = full_pipeline()
-    X_res, y_res = apply_smote(X_tr, y_tr)
 
-    # ── 5-fold cross-validation ───────────────────────────────────────
-    model  = build_rf()
+    # ── 5-fold CV with SMOTE applied INSIDE each fold ─────────────────
+    # Resampling the whole training set before cross_validate lets
+    # synthetic samples generated from a fold's validation rows leak into
+    # its training rows, which inflates the CV scores. An imblearn
+    # Pipeline applies SMOTE only to the training portion of each fold,
+    # so the validation rows stay untouched real data.
+    cv_pipeline = ImbPipeline([
+        ('smote', SMOTE(random_state=42, k_neighbors=5)),
+        ('rf',    build_rf()),
+    ])
     cv     = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     results = cross_validate(
-        model, X_res, y_res, cv=cv,
+        cv_pipeline, X_tr, y_tr, cv=cv,
         scoring=['recall', 'f1', 'roc_auc'],
         return_train_score=False
     )
@@ -53,6 +62,10 @@ def train_and_evaluate():
     cv_ci_report(results, model_name='Random Forest (5-fold CV)')
 
     # ── Train final model on full SMOTE training set ──────────────────
+    # The final deployed model may use all SMOTE-balanced training data;
+    # the leakage concern applies only to the CV evaluation above.
+    X_res, y_res = apply_smote(X_tr, y_tr)
+    model = build_rf()
     model.fit(X_res, y_res)
 
     # ── Save model and scaler ─────────────────────────────────────────

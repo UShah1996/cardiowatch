@@ -591,21 +591,35 @@ if uploaded is not None:
         signal_mv = signal / 1000.0  # µV → mV
 
         if ecg_model_choice == "CNN-LSTM (Deep Learning)" and cnn_ready:
-            from src.preprocessing.ecg_filter import bandpass_filter, segment_into_windows
-            filtered = bandpass_filter(signal_mv, 0.5, 100.0, fs=512)
-            windows  = segment_into_windows(filtered, fs=512, window_minutes=5)
-            st.success(f"Preprocessed into {len(windows)} window(s)")
+            from src.preprocessing.ecg_filter import bandpass_filter
+            from scipy.signal import resample as scipy_resample
+
+            # Match training preprocessing: the CNN-LSTM was trained on
+            # 10-second (5000-sample) windows at 500 Hz. Apple Watch records
+            # at 512 Hz, so resample first, then filter at 500 Hz.
+            WINDOW_SAMPLES = 5000           # 10 s at 500 Hz
+            n_500   = int(len(signal_mv) * 500 / 512)
+            sig_500 = scipy_resample(signal_mv, n_500).astype(np.float32)
+            filtered = bandpass_filter(sig_500, 0.5, 100.0, fs=500)
+
+            # Segment into non-overlapping 10 s windows and score every one,
+            # then average — the old code scored only the first 10 s and
+            # discarded the rest of the recording.
+            n_windows = max(1, len(filtered) // WINDOW_SAMPLES)
+            st.success(
+                f"Preprocessed into {n_windows} window(s) of 10 s "
+                f"({len(sig_500)/500:.1f}s @ 500 Hz, resampled from 512 Hz)"
+            )
 
             ecg_probs_list = []
-            for window in windows:
-                w = window.astype(np.float32)
+            for i in range(n_windows):
+                w = filtered[i * WINDOW_SAMPLES:(i + 1) * WINDOW_SAMPLES]
+                w = w.astype(np.float32)
                 w = np.clip(w, -2.0, 2.0)
                 w = (w - w.mean()) / (w.std() + 1e-8)
                 w = np.clip(w, -5.0, 5.0)
-                if len(w) >= 5000:
-                    w = w[:5000]
-                else:
-                    w = np.pad(w, (0, 5000 - len(w)))
+                if len(w) < WINDOW_SAMPLES:
+                    w = np.pad(w, (0, WINDOW_SAMPLES - len(w)))
                 x = torch.tensor(w).unsqueeze(0).unsqueeze(0)
                 with torch.no_grad():
                     prob = torch.sigmoid(cnn_model(x).squeeze()).item()
