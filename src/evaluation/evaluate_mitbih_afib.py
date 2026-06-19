@@ -28,9 +28,17 @@ from sklearn.metrics import (recall_score, precision_score, f1_score,
                              classification_report)
 from src.models.rr_afib_detector import extract_rr_features
 from src.evaluation.confidence_intervals import wilson_ci
+from src.experiments.provenance import write_json, write_run_metadata
 
 MIT_DIR       = 'data/raw/mit_afib/files'
-MODEL_PATH    = 'data/processed/rr_rf_model.pkl'
+# Prefer the leakage-safe complement RR model trained by the pipeline;
+# fall back to the legacy all-CPSC model name if that is what exists.
+_RR_MODEL_CANDIDATES = [
+    'data/processed/rr_rf_cpsc_complement.pkl',
+    'data/processed/rr_rf_model.pkl',
+]
+MODEL_PATH    = next((p for p in _RR_MODEL_CANDIDATES if os.path.exists(p)),
+                     _RR_MODEL_CANDIDATES[0])
 WINDOW_SEC    = 30     # 30-second windows — matches Apple Watch + PhysioNet 2017
 TARGET_FS     = 500    # resample to match training data
 SRC_FS        = 250    # MIT-BIH native sampling rate
@@ -255,6 +263,43 @@ def evaluate():
     cm = confusion_matrix(all_labels, all_preds)
     print(f"  TN={cm[0][0]}  FP={cm[0][1]}")
     print(f"  FN={cm[1][0]}  TP={cm[1][1]}")
+
+    # ── Emit a result-table-compatible JSON into docs/results/<run_id>/ ──
+    tn, fp, fn, tp = int(cm[0][0]), int(cm[0][1]), int(cm[1][0]), int(cm[1][1])
+    try:
+        auc_val = float(roc_auc_score(all_labels, all_probs))
+    except Exception:
+        auc_val = None
+    spec = tn / max(tn + fp, 1)
+    ppv = tp / max(tp + fp, 1)
+    npv = tn / max(tn + fn, 1)
+    bal_acc = 0.5 * (rec + spec)
+    mit_metrics = {
+        "n": n_total,
+        "threshold": 0.40,
+        "auc": auc_val,
+        "accuracy": acc,
+        "accuracy_wilson_ci": [acc_lo, acc_hi],
+        "recall": rec,
+        "recall_wilson_ci": [rec_lo, rec_hi],
+        "specificity": float(spec),
+        "balanced_accuracy": float(bal_acc),
+        "ppv": float(ppv),
+        "npv": float(npv),
+        "f1": float(f1_score(all_labels, all_preds, zero_division=0)),
+        "confusion_matrix": {"tn": tn, "fp": fp, "fn": fn, "tp": tp},
+    }
+    out_dir = write_run_metadata(extra={"stage": "mitbih_eval"})
+    write_json(out_dir / "mitbih_eval.json", {
+        "rows": [{
+            "model": "rr_rf",
+            "dataset": "MIT-BIH AFib (afdb, Holter 250 Hz, zero-shot)",
+            "metrics": mit_metrics,
+        }],
+        "n_afib_windows": int(n_pos),
+        "device": "Holter 250 Hz ambulatory",
+    })
+    print(f"\nWrote MIT-BIH eval JSON -> {out_dir / 'mitbih_eval.json'}")
 
     # ── 3-dataset comparison ──────────────────────────────────────────
     print(f"\n{'='*65}")

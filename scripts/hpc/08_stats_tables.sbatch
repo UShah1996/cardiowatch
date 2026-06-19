@@ -16,4 +16,8 @@ source scripts/hpc/common.sh
 "${CARDIOWATCH_PYTHON}" -m src.evaluation.result_tables \
   --paired-cpsc-json "${CARDIOWATCH_RESULTS_DIR}/paired_cpsc_predictions.json" \
   --latency-json "${CARDIOWATCH_RESULTS_DIR}/latency_bootstrap.json" \
+  --clinical-json "${CARDIOWATCH_RESULTS_DIR}/clinical_eval.json" \
+  --mitbih-json "${CARDIOWATCH_RESULTS_DIR}/mitbih_eval.json" \
+  --apple-watch-json "${CARDIOWATCH_RESULTS_DIR}/apple_watch_eval.json" \
+  --stats-json "${CARDIOWATCH_RESULTS_DIR}/stat_tests.json" \
   --out-prefix "${CARDIOWATCH_RESULTS_DIR}/paper_tables"

@@ -265,29 +265,72 @@ def main() -> None:
         paired = json.load(f)
     y = np.array(paired["labels"], dtype=int)
     names = paired["model_names"]
-    outputs = {}
-    p_values = []
-    p_keys = []
+    probs = paired["probabilities"]
+    pred_fixed = paired["predictions_fixed"]
+    pred_matched = paired.get("predictions_matched_specificity", {})
 
-    for i in range(len(names)):
-        for j in range(i + 1, len(names)):
-            a_name, b_name = names[i], names[j]
-            key = f"{a_name}_vs_{b_name}"
-            scores_a = paired["probabilities"][a_name]
-            scores_b = paired["probabilities"][b_name]
-            preds_a = paired["predictions_fixed"][a_name]
-            preds_b = paired["predictions_fixed"][b_name]
-            correct_a = np.array(preds_a, dtype=int) == y
-            correct_b = np.array(preds_b, dtype=int) == y
-            d = asdict(delong_roc_test(y, scores_a, scores_b))
-            m = asdict(mcnemar_test(correct_a, correct_b))
-            outputs[key] = {"delong": d, "mcnemar_fixed": m}
-            p_keys.extend([(key, "delong"), (key, "mcnemar_fixed")])
-            p_values.extend([d["p_value"], m["p_value"]])
+    # Pre-registered Holm family: DeLong + fixed-threshold McNemar across the
+    # model-vs-model pairs only. random_baseline is a sanity floor (not a
+    # hypothesis) and matched-specificity McNemar is a sensitivity analysis;
+    # both are reported with raw p-values OUTSIDE the correction family.
+    preferred = ["rr_rf", "cnn_cpsc", "cnn_combined_deploy"]
+    hypothesis_models = [m for m in preferred if m in probs]
+    hypothesis_models += [m for m in names
+                          if m in probs and m not in preferred and m != "random_baseline"]
 
-    adjusted = holm_correction(p_values)
-    for (key, test_name), adj in zip(p_keys, adjusted):
-        outputs[key][test_name]["p_value_holm"] = adj
+    def _correct(name: str) -> np.ndarray:
+        return np.array(pred_fixed[name], dtype=int) == y
+
+    comparisons: dict[str, Any] = {}
+    family_keys: list[tuple[str, str]] = []
+    family_pvals: list[float] = []
+
+    for i in range(len(hypothesis_models)):
+        for j in range(i + 1, len(hypothesis_models)):
+            a, b = hypothesis_models[i], hypothesis_models[j]
+            key = f"{a}_vs_{b}"
+            d = asdict(delong_roc_test(y, probs[a], probs[b]))
+            m = asdict(mcnemar_test(_correct(a), _correct(b)))
+            entry: dict[str, Any] = {"in_holm_family": True, "delong": d, "mcnemar_fixed": m}
+            if a in pred_matched and b in pred_matched:
+                mm = asdict(mcnemar_test(
+                    np.array(pred_matched[a], dtype=int) == y,
+                    np.array(pred_matched[b], dtype=int) == y,
+                ))
+                mm["holm_note"] = "sensitivity analysis — not in Holm family"
+                entry["mcnemar_matched_specificity"] = mm
+            comparisons[key] = entry
+            family_keys.extend([(key, "delong"), (key, "mcnemar_fixed")])
+            family_pvals.extend([d["p_value"], m["p_value"]])
+
+    for (key, test_name), adj in zip(family_keys, holm_correction(family_pvals)):
+        comparisons[key][test_name]["p_value_holm"] = adj
+
+    # Sanity comparisons vs the random baseline — raw p only, not corrected.
+    if "random_baseline" in probs:
+        for a in hypothesis_models:
+            key = f"{a}_vs_random_baseline"
+            comparisons[key] = {
+                "in_holm_family": False,
+                "holm_note": "sanity floor — not in Holm family",
+                "delong": asdict(delong_roc_test(y, probs[a], probs["random_baseline"])),
+                "mcnemar_fixed": asdict(mcnemar_test(_correct(a), _correct("random_baseline"))),
+            }
+
+    outputs = {
+        "primary_endpoint": "rr_rf_vs_cnn_cpsc",
+        "holm_family": [f"{k}:{t}" for k, t in family_keys],
+        "holm_family_size": len(family_pvals),
+        "comparisons": comparisons,
+        "notes": [
+            "Holm correction is applied ONLY across DeLong + fixed-threshold McNemar "
+            "for the model-vs-model pairs (pre-registered family).",
+            "Matched-specificity McNemar and random_baseline comparisons are reported "
+            "raw as sensitivity / sanity analyses, outside the correction family.",
+            "This file is the canonical source for corrected p-values; "
+            "paired_cpsc_predictions.json carries raw stats only.",
+        ],
+    }
 
     out_path = Path(args.out) if args.out else Path(args.paired_json).with_name("stat_tests.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)

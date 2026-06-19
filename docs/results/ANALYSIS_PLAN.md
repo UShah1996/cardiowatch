@@ -55,7 +55,10 @@ Controlled same-data ECG comparison on the pre-registered CPSC holdout:
 
 - DeLong paired AUC test for RR+RF vs CNN-LSTM probabilities on identical holdout labels.
 - McNemar exact/binomial test when discordant counts are small; continuity-corrected chi-square otherwise.
-- Holm correction for multiple pairwise tests.
+- Holm correction is applied over a single pre-registered family: **DeLong + fixed-threshold McNemar for the model-vs-model pairs only** (rr_rf vs cnn_cpsc [primary], rr_rf vs cnn_combined_deploy, cnn_cpsc vs cnn_combined_deploy) = 6 tests.
+  - Matched-specificity McNemar is a **sensitivity analysis** reported with raw p-values, NOT in the correction family.
+  - Comparisons against `random_baseline` are **sanity checks** reported with raw p-values, NOT in the correction family.
+  - `stat_tests.json` is the single canonical source of corrected p-values; `paired_cpsc_predictions.json` carries raw stats only.
 - Effect sizes:
   - Delta AUC and DeLong/bootstrap confidence interval.
   - McNemar odds ratio `b/c` with continuity-adjusted confidence interval.

@@ -17,7 +17,7 @@ import numpy as np
 import torch
 import wfdb
 
-from src.evaluation.stat_tests import delong_roc_test, holm_correction, mcnemar_test
+from src.evaluation.stat_tests import delong_roc_test, mcnemar_test
 from src.experiments.provenance import read_json, results_dir, write_json, write_run_metadata
 from src.models.cnn_lstm import build_model
 from src.models.rr_afib_detector import extract_rr_features
@@ -155,9 +155,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         for name in model_names
     }
 
+    # Raw paired stats only. Holm-corrected p-values are computed canonically
+    # in stat_tests.py over the pre-registered family (see stat_tests.json) to
+    # avoid two divergent corrections for the same comparison.
     stats_out: dict[str, Any] = {}
-    p_values: list[float] = []
-    p_keys: list[tuple[str, str]] = []
     y = np.array(labels, dtype=int)
     for a, b in [("rr_rf", "cnn_cpsc"), ("rr_rf", "cnn_combined_deploy"), ("cnn_cpsc", "cnn_combined_deploy")]:
         if a not in probabilities or b not in probabilities:
@@ -165,21 +166,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         key = f"{a}_vs_{b}"
         correct_a = np.array(predictions_fixed[a]) == y
         correct_b = np.array(predictions_fixed[b]) == y
-        delong = delong_roc_test(y, probabilities[a], probabilities[b])
-        mcnemar_fixed = mcnemar_test(correct_a, correct_b)
         correct_a_m = np.array(predictions_matched[a]) == y
         correct_b_m = np.array(predictions_matched[b]) == y
-        mcnemar_matched = mcnemar_test(correct_a_m, correct_b_m)
         stats_out[key] = {
-            "delong": delong.__dict__,
-            "mcnemar_fixed": mcnemar_fixed.__dict__,
-            "mcnemar_matched_specificity": mcnemar_matched.__dict__,
+            "delong": delong_roc_test(y, probabilities[a], probabilities[b]).__dict__,
+            "mcnemar_fixed": mcnemar_test(correct_a, correct_b).__dict__,
+            "mcnemar_matched_specificity": mcnemar_test(correct_a_m, correct_b_m).__dict__,
         }
-        for test_name in ["delong", "mcnemar_fixed", "mcnemar_matched_specificity"]:
-            p_keys.append((key, test_name))
-            p_values.append(stats_out[key][test_name]["p_value"])
-    for (key, test_name), adj in zip(p_keys, holm_correction(p_values)):
-        stats_out[key][test_name]["p_value_holm"] = adj
 
     out_dir = write_run_metadata(extra={"stage": "paired_cpsc_eval"})
     payload = {
@@ -201,6 +194,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             "Primary controlled comparison is rr_rf vs cnn_cpsc.",
             "cnn_combined_deploy is a secondary data-asymmetric deployment row.",
             "random_baseline is a deterministic sanity floor, not a clinical model.",
+            "stats here are RAW; Holm-corrected p-values are in stat_tests.json.",
         ],
     }
     out_path = Path(args.out) if args.out else out_dir / "paired_cpsc_predictions.json"

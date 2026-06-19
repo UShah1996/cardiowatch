@@ -57,15 +57,83 @@ def metrics_for(y_true, probs, threshold: float) -> dict[str, Any]:
     }
 
 
+def _fmt(x: Any, spec: str = ".3g") -> str:
+    return format(x, spec) if isinstance(x, (int, float)) else "—"
+
+
 def md_table(title: str, rows: list[dict[str, Any]]) -> str:
     lines = [f"## {title}", "", "| Model | Dataset | n | AUC | Recall | Specificity | Balanced Acc | PPV | NPV | F1 | Threshold |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in rows:
         m = r["metrics"]
+        auc = f"{m['auc']:.3f}" if m.get("auc") is not None else "—"
         lines.append(
             f"| {r['model']} | {r['dataset']} | {m['n']} | "
-            f"{m['auc']:.3f} | {m['recall']:.3f} | {m['specificity']:.3f} | "
+            f"{auc} | {m['recall']:.3f} | {m['specificity']:.3f} | "
             f"{m['balanced_accuracy']:.3f} | {m['ppv']:.3f} | {m['npv']:.3f} | "
             f"{m['f1']:.3f} | {m['threshold']:.2f} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def apple_watch_md(aw: dict[str, Any]) -> str:
+    acc = aw.get("accuracy")
+    lo, hi = (aw.get("accuracy_wilson_ci") or [None, None])
+    ci = f"{lo:.3f}–{hi:.3f}" if isinstance(lo, (int, float)) else "—"
+    lines = [
+        "## Apple Watch (exploratory — device-classifier labels)",
+        "",
+        "| Model | Dataset | n | n AFib | Accuracy | 95% CI (Wilson) | Threshold |",
+        "|---|---|---:|---:|---:|---:|---:|",
+        f"| {aw.get('model', 'cnn_lstm')} | {aw.get('dataset', 'Apple Watch')} | "
+        f"{aw.get('n', '?')} | {aw.get('n_afib', '?')} | "
+        f"{_fmt(acc, '.3f')} | {ci} | {_fmt(aw.get('threshold', 0.5), '.2f')} |",
+    ]
+    if aw.get("ground_truth_note"):
+        lines += ["", f"_{aw['ground_truth_note']}_"]
+    return "\n".join(lines) + "\n"
+
+
+def latency_md(L: dict[str, Any]) -> str:
+    lines = [
+        "## Detection Latency (bootstrap CPSC transitions)",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Transitions | {L.get('n_transitions', '?')} |",
+        f"| Detected | {L.get('n_detected', '?')} |",
+        f"| Threshold | {L.get('threshold', '?')} |",
+        f"| Stride (s) | {L.get('stride_sec', '?')} |",
+        f"| Median latency (min) | {L.get('latency_median_min')} |",
+        f"| Latency IQR (min) | {L.get('latency_iqr_min')} |",
+        f"| Normal-phase FP rate (median) | {_fmt(L.get('fp_rate_median'), '.3f')} |",
+    ]
+    if L.get("independence_caveat"):
+        lines += ["", f"_{L['independence_caveat']}_"]
+    return "\n".join(lines) + "\n"
+
+
+def stats_md(stats: dict[str, Any]) -> str:
+    lines = [
+        "## Statistical Comparisons (CPSC holdout)",
+        "",
+        f"Primary endpoint: `{stats.get('primary_endpoint', '?')}`. "
+        f"Holm family size: {stats.get('holm_family_size', '?')} "
+        "(DeLong + fixed-threshold McNemar over model-vs-model pairs; "
+        "matched-specificity and random-baseline rows are raw sensitivity/sanity).",
+        "",
+        "| Comparison | ΔAUC | 95% CI | DeLong p | DeLong p(Holm) | McNemar b/c | McNemar p | McNemar p(Holm) | In family |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|:--:|",
+    ]
+    for key, c in stats.get("comparisons", {}).items():
+        d = c.get("delong", {})
+        m = c.get("mcnemar_fixed", {})
+        ci = (f"[{d['ci_low']:.3f}, {d['ci_high']:.3f}]"
+              if isinstance(d.get("ci_low"), (int, float)) else "—")
+        lines.append(
+            f"| {key} | {_fmt(d.get('delta_auc'), '+.3f')} | {ci} | "
+            f"{_fmt(d.get('p_value'))} | {_fmt(d.get('p_value_holm'))} | "
+            f"{m.get('b', '?')}/{m.get('c', '?')} | {_fmt(m.get('p_value'))} | "
+            f"{_fmt(m.get('p_value_holm'))} | {'yes' if c.get('in_holm_family') else 'no'} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -104,27 +172,61 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build paper-ready result tables")
     parser.add_argument("--paired-cpsc-json", required=True)
     parser.add_argument("--latency-json", default=None)
+    parser.add_argument("--clinical-json", default=None)
+    parser.add_argument("--mitbih-json", default=None)
+    parser.add_argument("--apple-watch-json", default=None)
+    parser.add_argument("--stats-json", default=None)
     parser.add_argument("--out-prefix", default=None)
     args = parser.parse_args()
 
     out_dir = write_run_metadata(extra={"stage": "result_tables"})
     paired = read_json(args.paired_cpsc_json)
     tables = build_from_paired(paired)
-    if args.latency_json:
-        tables["latency_bootstrap"] = read_json(args.latency_json)
+
+    def _maybe(path):
+        return read_json(path) if path and Path(path).exists() else None
+
+    clinical = _maybe(args.clinical_json)
+    mitbih = _maybe(args.mitbih_json)
+    apple = _maybe(args.apple_watch_json)
+    stats = _maybe(args.stats_json)
+    latency = _maybe(args.latency_json)
+
+    if clinical:
+        tables["clinical"] = clinical
+    if mitbih:
+        tables["mitbih"] = mitbih
+    if apple:
+        tables["apple_watch"] = apple
+    if stats:
+        tables["statistical_comparisons"] = stats
+    if latency:
+        tables["latency_bootstrap"] = latency
 
     prefix = Path(args.out_prefix) if args.out_prefix else out_dir / "paper_tables"
     write_json(prefix.with_suffix(".json"), tables)
-    md = [
-        "# CardioWatch Paper Result Tables",
-        "",
-        md_table("ECG Controlled And Deployment Results", tables["ecg_controlled_and_deployment"]),
+
+    md = ["# CardioWatch Paper Result Tables", ""]
+    if clinical and clinical.get("rows"):
+        md.append(md_table("Clinical Models (Kaggle cohort, distinct from ECG cohorts)", clinical["rows"]))
+    md.append(md_table("ECG Controlled And Deployment Results (CPSC holdout)",
+                       tables["ecg_controlled_and_deployment"]))
+    if stats:
+        md.append(stats_md(stats))
+    if mitbih and mitbih.get("rows"):
+        md.append(md_table("Cross-Device: MIT-BIH AFib (zero-shot)", mitbih["rows"]))
+    if apple:
+        md.append(apple_watch_md(apple))
+    if latency:
+        md.append(latency_md(latency))
+    md += [
         "## Validity Notes",
         "",
-        "- Clinical-only and ECG-only models use different cohorts and are reported separately.",
+        "- Clinical-only and ECG-only models use different cohorts and are reported separately (not a cross-modal ablation).",
         "- Apple Watch agreement is not a clinical gold standard unless independently adjudicated.",
         "- Fusion rows are exploratory unless based on truly paired clinical + ECG data.",
-        "- Detection latency is measured after AFib onset.",
+        "- Detection latency is measured after AFib onset; the old 30-minute lead-time framing is invalid.",
+        "- Corrected p-values come from stat_tests.json (pre-registered Holm family); matched-specificity and random-baseline tests are raw.",
         "",
     ]
     prefix.with_suffix(".md").write_text("\n".join(md))

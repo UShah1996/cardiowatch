@@ -10,4 +10,6 @@
 source scripts/hpc/common.sh
 "${CARDIOWATCH_PYTHON}" src/models/random_forest.py
 "${CARDIOWATCH_PYTHON}" src/models/xgboost_model.py
+"${CARDIOWATCH_PYTHON}" -m src.evaluation.clinical_report \
+  --out "${CARDIOWATCH_RESULTS_DIR}/clinical_eval.json"
 
