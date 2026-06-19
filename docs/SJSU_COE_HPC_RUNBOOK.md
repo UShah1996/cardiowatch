@@ -35,17 +35,45 @@ bash scripts/hpc/sjsu_setup.sh
 
 ## 4. Stage Data On HPC Storage
 
-Place large datasets on the HPC filesystem, not in git:
+Place large datasets on the HPC filesystem, not in git. The expected layout is:
 
 ```text
-data/raw/heart.csv
+data/raw/heart.csv                                                                 # tracked in repo
 data/raw/classification-of-12-lead-ecgs-the-physionetcomputing-in-cardiology-challenge-2020-1.0.2/training/cpsc_2018/
 data/raw/challenge_2017/training2017/
-data/raw/mit_afib/
+data/raw/mit_afib/files/
 data/apple_health_export/        # optional/private Apple Watch validation
 ```
 
 `data/raw/`, `data/processed/`, checkpoints, CSVs, and Apple exports are ignored by git.
+
+### Automated staging (recommended)
+
+Run the helper **on a login node** (the JupyterLab terminal — compute nodes have
+no outbound network). It downloads CPSC 2018 (Kaggle), PhysioNet 2017, and
+MIT-BIH AFib to a scratch directory, symlinks them into `data/raw/`, checks file
+counts, and runs the preflight validator:
+
+```bash
+source .venv/bin/activate                  # the env from sjsu_setup.sh
+# CPSC needs Kaggle credentials at ~/.kaggle/kaggle.json (or set KAGGLE_JSON=...)
+CARDIOWATCH_DATA=/scratch/$USER/cardiowatch_data bash scripts/hpc/stage_data.sh
+```
+
+The script is idempotent — datasets already meeting the expected counts are
+skipped. If the Kaggle CPSC folder unzips under a different top-level name, or the
+PhysioNet 2017 mirror URL changes, the helper prints the exact fallback step.
+
+### Manual check
+
+To verify staging without the helper:
+
+```bash
+find -L data/raw/classification-*/training/cpsc_2018 -name '*.hea' | wc -l   # expect >= 6800
+find -L data/raw/challenge_2017 -name '*.mat'        | wc -l                  # expect >= 8200
+find -L data/raw/mit_afib       -name '*.dat'        | wc -l                  # expect >= 20
+python -m src.experiments.validate_data --require-p17 --require-mit
+```
 
 ## 5. Submit The Full Pipeline
 
