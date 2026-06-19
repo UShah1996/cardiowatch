@@ -7,6 +7,10 @@ data/processed/
 data/MNIST/
 data/simulated/
 data/apple_health_export/
+data/apple_health_export*.zip
+data/__MACOSX/
+*.zip
+logs/
 *.csv
 *.h5
 *.pkl
