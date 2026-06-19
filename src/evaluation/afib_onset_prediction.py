@@ -63,7 +63,17 @@ def _neurokit_features(signal: np.ndarray, fs: int, pwave: bool = False) -> dict
     values are zeroed so they never poison the feature matrix.
     """
     try:
+        import warnings as _w
         import neurokit2 as nk
+        # Short (30-s) windows make some long-scale HRV indices undefined
+        # (DFA_alpha2, multiscale entropy). We don't use those indices, but
+        # neurokit still computes and warns on them — silence the noise so it
+        # doesn't flood logs over hundreds of thousands of windows.
+        _w.filterwarnings("ignore", category=RuntimeWarning)
+        try:
+            _w.filterwarnings("ignore", category=nk.NeuroKitWarning)
+        except Exception:
+            _w.filterwarnings("ignore", message=".*DFA_alpha2.*")
     except Exception:
         return {}
     out: dict[str, float] = {}
