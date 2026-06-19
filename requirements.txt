@@ -20,6 +20,7 @@ scipy==1.13.0
 
 # Visualisation
 plotly==5.22.0
+matplotlib==3.8.4   # used by lead_time.py, latency_bootstrap.py, make_figures.py
 
 # Explainability
 shap==0.45.1

@@ -75,6 +75,39 @@ find -L data/raw/mit_afib       -name '*.dat'        | wc -l                  # 
 python -m src.experiments.validate_data --require-p17 --require-mit
 ```
 
+### Apple Watch exports (optional — needed for the Apple Watch result rows)
+
+The CPSC/PhysioNet/MIT-BIH downloads do **not** include Apple Watch data. Job 06
+runs the Apple Watch evaluation only if `data/apple_health_export/` exists with
+this per-person layout (the volunteer keys are hard-coded in
+`src/models/build_fusion_apple_watch.py`):
+
+```text
+data/apple_health_export/apple_health_export_urmi/electrocardiograms/*.csv
+data/apple_health_export/apple_health_export_mihir/electrocardiograms/*.csv
+data/apple_health_export/apple_health_export_saurabh/electrocardiograms/*.csv
+data/apple_health_export/apple_health_export_steven/electrocardiograms/*.csv
+```
+
+These are private exports, so upload them by hand (they are gitignored — never
+committed). From the JupyterLab file browser, drag the folders into
+`data/apple_health_export/`, or from your laptop:
+
+```bash
+scp -r apple_health_export_* <user>@coe-hpc2.sjsu.edu:~/cardiowatch/data/apple_health_export/
+```
+
+Verify before launching:
+
+```bash
+for p in urmi mihir saurabh steven; do
+  echo "$p: $(ls data/apple_health_export/apple_health_export_$p/electrocardiograms/*.csv 2>/dev/null | wc -l) CSVs"
+done
+```
+
+If this directory is absent the pipeline still completes — you simply get every
+result **except** the Apple Watch rows, and can add them in a later run.
+
 ## 5. Submit The Full Pipeline
 
 ```bash
@@ -99,9 +132,10 @@ j05=$(sbatch --parsable --dependency=afterok:${j01} --export=ALL,CARDIOWATCH_RUN
 j06=$(sbatch --parsable --dependency=afterok:${j03}:${j04}:${j05} --export=ALL,CARDIOWATCH_RUN_ID="${CARDIOWATCH_RUN_ID}" scripts/hpc/06_cross_device_eval.sbatch)
 j07=$(sbatch --parsable --dependency=afterok:${j04} --export=ALL,CARDIOWATCH_RUN_ID="${CARDIOWATCH_RUN_ID}" scripts/hpc/07_latency_bootstrap.sbatch)
 j08=$(sbatch --parsable --dependency=afterok:${j06}:${j07} --export=ALL,CARDIOWATCH_RUN_ID="${CARDIOWATCH_RUN_ID}" scripts/hpc/08_stats_tables.sbatch)
+j09=$(sbatch --parsable --dependency=afterok:${j08} --export=ALL,CARDIOWATCH_RUN_ID="${CARDIOWATCH_RUN_ID}" scripts/hpc/09_figures.sbatch)
 
-printf "Submitted jobs:\n00 %s\n01 %s\n02 %s\n03 %s\n04 %s\n05 %s\n06 %s\n07 %s\n08 %s\n" \
-  "$j00" "$j01" "$j02" "$j03" "$j04" "$j05" "$j06" "$j07" "$j08"
+printf "Submitted jobs:\n00 %s\n01 %s\n02 %s\n03 %s\n04 %s\n05 %s\n06 %s\n07 %s\n08 %s\n09 %s\n" \
+  "$j00" "$j01" "$j02" "$j03" "$j04" "$j05" "$j06" "$j07" "$j08" "$j09"
 ```
 
 Monitor jobs:
@@ -131,7 +165,7 @@ Commit only:
 - `docs/results/ANALYSIS_PLAN.md`
 - `docs/results/<run_id>/*.json`
 - `docs/results/<run_id>/*.md`
-- selected final figures (`*.png`)
+- generated figures in `docs/results/<run_id>/figures/*.png` (from job 09)
 
 Do not commit raw ECG, Apple exports, `.csv`, `.pkl`, `.pt`, or full logs.
 
