@@ -18,7 +18,6 @@ j05=$(sbatch --parsable --dependency=afterok:${j01} --export=ALL,CARDIOWATCH_RUN
 j06=$(sbatch --parsable --dependency=afterok:${j03}:${j04}:${j05} --export=ALL,CARDIOWATCH_RUN_ID="${RUN_ID}" scripts/hpc/06_cross_device_eval.sbatch)
 j07=$(sbatch --parsable --dependency=afterok:${j04} --export=ALL,CARDIOWATCH_RUN_ID="${RUN_ID}" scripts/hpc/07_latency_bootstrap.sbatch)
 j08=$(sbatch --parsable --dependency=afterok:${j06}:${j07} --export=ALL,CARDIOWATCH_RUN_ID="${RUN_ID}" scripts/hpc/08_stats_tables.sbatch)
-j09=$(sbatch --parsable --dependency=afterok:${j08} --export=ALL,CARDIOWATCH_RUN_ID="${RUN_ID}" scripts/hpc/09_figures.sbatch)
 
 cat <<EOF
 Submitted:
@@ -31,6 +30,5 @@ Submitted:
   06 eval          ${j06}
   07 latency       ${j07}
   08 tables        ${j08}
-  09 figures       ${j09}
 EOF
 

@@ -3,6 +3,7 @@
 #SBATCH --output=logs/%x-%j.out
 #SBATCH --error=logs/%x-%j.err
 #SBATCH --time=00:30:00
+#SBATCH --partition=cpuqs
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 
