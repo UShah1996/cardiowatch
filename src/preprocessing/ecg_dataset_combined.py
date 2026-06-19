@@ -109,11 +109,17 @@ class CombinedECGDataset(Dataset):
         loaded  = 0
         skipped = 0
 
+        # Sort paths for a deterministic, machine-independent dataset order
+        # (os.walk order is filesystem-dependent and would make the seeded
+        # train/val split non-reproducible across machines).
+        hea_paths = []
         for root, dirs, files in os.walk(data_dir):
             for fname in files:
-                if not fname.endswith('.hea'):
-                    continue
-                path = os.path.join(root, fname.replace('.hea', ''))
+                if fname.endswith('.hea'):
+                    hea_paths.append(os.path.join(root, fname.replace('.hea', '')))
+        hea_paths.sort()
+
+        for path in hea_paths:
                 try:
                     record = wfdb.rdrecord(path)
                     header = wfdb.rdheader(path)
@@ -190,7 +196,7 @@ class CombinedECGDataset(Dataset):
 
         ref_dir = os.path.dirname(ref_path)
 
-        for record_name, label_str in label_map.items():
+        for record_name, label_str in sorted(label_map.items()):
             # Skip noisy recordings if requested
             if exclude_noisy and label_str == '~':
                 skipped += 1

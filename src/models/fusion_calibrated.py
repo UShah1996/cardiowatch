@@ -374,10 +374,16 @@ class CalibratedFusion:
 
 # ── Demographic helpers ───────────────────────────────────────────────
 
-def _extract_cpsc_demographics(data_dir: str, indices: list) -> list:
+def _extract_cpsc_demographics(ordered_paths: list, indices: list) -> list:
     """
-    Scan CPSC 2018 .hea files and extract Age, Sex, and resting heart rate
-    for each recording corresponding to the given dataset indices.
+    Extract Age, Sex, and resting heart rate for the recordings at the
+    given dataset indices.
+
+    `ordered_paths` MUST be the dataset's own kept-record paths (i.e.
+    ECGDataset.paths), so that index i here refers to exactly the same
+    recording as index i in the dataset. Previously this function
+    re-walked the directory with a different ordering than ECGDataset,
+    which silently mismatched demographics to ECG scores.
 
     CPSC 2018 header comment format:
         Age: 45
@@ -388,8 +394,8 @@ def _extract_cpsc_demographics(data_dir: str, indices: list) -> list:
     detection — the same approach as rr_afib_detector.py.
 
     Args:
-        data_dir : path to CPSC training directory
-        indices  : list of dataset indices (from val_ds.indices)
+        ordered_paths : ECGDataset.paths — record paths in dataset order
+        indices       : list of dataset indices (from val_ds.indices)
 
     Returns:
         list of dicts: [{'age': int|None, 'sex': int|None, 'hr': float|None}]
@@ -420,21 +426,9 @@ def _extract_cpsc_demographics(data_dir: str, indices: list) -> list:
         except Exception:
             return None
 
-    # First pass: collect all valid .hea paths in order (same order as ECGDataset)
-    all_paths = []
-    for root, dirs, files in os.walk(data_dir):
-        for fname in sorted(files):
-            if not fname.endswith('.hea'):
-                continue
-            path = os.path.join(root, fname.replace('.hea', ''))
-            try:
-                record = wfdb.rdrecord(path)
-                leads  = [n.strip().upper() for n in record.sig_name]
-                if 'I' not in leads:
-                    continue
-                all_paths.append(path)
-            except Exception:
-                continue
+    # Use the dataset's own ordered paths so index i here is the same
+    # recording as index i in the dataset (no independent re-walk).
+    all_paths = ordered_paths
 
     demographics = []
     for idx in indices:
@@ -607,7 +601,7 @@ def build_fusion_from_cpsc(
     # Heart rate is computed from the ECG signal via R-peak detection.
     print("\nExtracting CPSC patient demographics (Age, Sex, HR) from headers...")
     print("  (This scans ECG signals for R-peaks — takes ~2 min)")
-    cpsc_demographics = _extract_cpsc_demographics(data_dir, val_ds.indices)
+    cpsc_demographics = _extract_cpsc_demographics(dataset.paths, val_ds.indices)
     n_with_age = sum(1 for d in cpsc_demographics if d['age'] is not None)
     n_with_hr  = sum(1 for d in cpsc_demographics if d['hr']  is not None)
     print(f"  Age found : {n_with_age}/{len(cpsc_demographics)} recordings")
