@@ -110,6 +110,20 @@ result **except** the Apple Watch rows, and can add them in a later run.
 
 ## 5. Submit The Full Pipeline
 
+Before submitting, confirm GPU partitions are visible:
+
+```bash
+sinfo -s
+sinfo -o "%P %G %D %t"
+```
+
+On the SJSU COE cluster, CNN jobs `04` and `05` request `gpuqs` with one generic GPU:
+
+```bash
+#SBATCH --partition=gpuqs
+#SBATCH --gres=gpu:1
+```
+
 ```bash
 bash scripts/hpc/submit_pipeline.sh
 ```
