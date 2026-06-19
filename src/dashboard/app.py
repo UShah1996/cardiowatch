@@ -530,9 +530,9 @@ with p4:
 
 st.caption(caption_text)
 st.info(
-    "⏱️ Multi-modal fusion provides **≥30 minute lead time** before cardiac "
-    "event for patients with rf_prob≥0.45 at threshold 0.40–0.60 — target MET ✅  "
-    "| Validated across 4 alert thresholds with 0 false positives in normal phase"
+    "⏱️ Detection-latency analysis is now reported as time from verified "
+    "AFib onset to first alert, plus normal-phase false positives. "
+    "The older 30-minute lead-time framing is intentionally retired."
 )
 
 st.divider()
@@ -636,10 +636,14 @@ if uploaded is not None:
 
         elif ecg_model_choice == "RR Intervals (Traditional ML)" and rr_ready:
             from scipy.signal import resample as scipy_resample
-            from src.models.rr_afib_detector import extract_rr_features
+            from src.models.rr_afib_detector import (
+                APPLE_WATCH_SKIP_SEC,
+                extract_rr_features,
+            )
 
             n_500   = int(len(signal_mv) * 500 / 512)
             sig_500 = scipy_resample(signal_mv, n_500).astype(np.float32)
+            sig_500 = sig_500[int(APPLE_WATCH_SKIP_SEC * 500):]
             feats   = extract_rr_features(sig_500, fs=500)
 
             if feats is None:
@@ -652,6 +656,8 @@ if uploaded is not None:
                     [{k: feats.get(k, 0) for k in rr_feat_names}]
                 )
                 ecg_prob = float(rr_model.predict_proba(feat_vec)[0, 1])
+                if feats.get("rr_cv", 0) < 0.15:
+                    ecg_prob = min(ecg_prob, 0.25)
 
                 rr_col1, rr_col2, rr_col3, rr_col4 = st.columns(4)
                 with rr_col1:
