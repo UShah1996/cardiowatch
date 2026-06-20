@@ -112,6 +112,45 @@ def latency_md(L: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def onset_md(o: dict[str, Any]) -> str:
+    """Exploratory AFib onset-prediction table (pooled + per-source rows)."""
+    def row(name: str, n_rec, auc, sens, sens_ci, lt, lt_iqr, fa):
+        ci = (f" ({sens_ci[0]:.2f}–{sens_ci[1]:.2f})"
+              if isinstance(sens_ci, (list, tuple)) and sens_ci and sens_ci[0] is not None else "")
+        iqr = (f" (IQR {lt_iqr[0]:.1f}–{lt_iqr[1]:.1f})"
+               if isinstance(lt_iqr, (list, tuple)) and lt_iqr and lt_iqr[0] is not None else "")
+        sens_s = f"{sens:.2f}{ci}" if isinstance(sens, (int, float)) else "—"
+        lt_s = f"{lt:.1f}{iqr}" if isinstance(lt, (int, float)) else "—"
+        return (f"| {name} | {n_rec} | {_fmt(auc, '.3f')} | {sens_s} | "
+                f"{lt_s} | {_fmt(fa, '.2f')} |")
+
+    lines = [
+        "## AFib Onset Prediction (exploratory — pre-onset sinus)",
+        "",
+        f"Features: {o.get('feature_mode', '?')}"
+        + (" + P-wave" if o.get('pwave_features') else "")
+        + (", per-patient normalized" if o.get('per_patient_normalized') else "")
+        + f"; horizon {o.get('horizon_min', '?')} min; patient-grouped CV.",
+        "",
+        "| Cohort | n patients | window AUC | onset sensitivity (95% CI) | median lead time, min | false alarms/h |",
+        "|---|---:|---:|---:|---:|---:|",
+        row("pooled", o.get("n_records", "?"), o.get("window_auc_grouped_cv"),
+            o.get("onset_sensitivity"), o.get("onset_sensitivity_wilson_ci"),
+            o.get("lead_time_median_min"), o.get("lead_time_iqr_min"),
+            o.get("false_alarms_per_hour")),
+    ]
+    for src, v in (o.get("per_source") or {}).items():
+        lines.append(row(src, v.get("n_records", "?"),
+                         v.get("window_auc_grouped_cv_oof"),
+                         v.get("onset_sensitivity"), None,
+                         v.get("lead_time_median_min"), v.get("lead_time_iqr_min"),
+                         v.get("false_alarms_per_hour")))
+    lines += ["", "_Exploratory: threshold set at fixed control specificity on "
+              "out-of-fold scores; modest, sub-clinical signal. Not a clinical "
+              "early-warning claim._"]
+    return "\n".join(lines) + "\n"
+
+
 def stats_md(stats: dict[str, Any]) -> str:
     lines = [
         "## Statistical Comparisons (CPSC holdout)",
@@ -176,6 +215,7 @@ def main() -> None:
     parser.add_argument("--mitbih-json", default=None)
     parser.add_argument("--apple-watch-json", default=None)
     parser.add_argument("--stats-json", default=None)
+    parser.add_argument("--onset-json", default=None)
     parser.add_argument("--out-prefix", default=None)
     args = parser.parse_args()
 
@@ -191,6 +231,7 @@ def main() -> None:
     apple = _maybe(args.apple_watch_json)
     stats = _maybe(args.stats_json)
     latency = _maybe(args.latency_json)
+    onset = _maybe(args.onset_json)
 
     if clinical:
         tables["clinical"] = clinical
@@ -202,6 +243,8 @@ def main() -> None:
         tables["statistical_comparisons"] = stats
     if latency:
         tables["latency_bootstrap"] = latency
+    if onset:
+        tables["onset_prediction"] = onset
 
     prefix = Path(args.out_prefix) if args.out_prefix else out_dir / "paper_tables"
     write_json(prefix.with_suffix(".json"), tables)
@@ -219,6 +262,8 @@ def main() -> None:
         md.append(apple_watch_md(apple))
     if latency:
         md.append(latency_md(latency))
+    if onset:
+        md.append(onset_md(onset))
     md += [
         "## Validity Notes",
         "",
