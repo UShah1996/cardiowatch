@@ -23,40 +23,38 @@ The ECG component is built around **AFib detection using Lead I only** — the s
 
 ## 🎯 Key Results
 
-| Model | Input | Recall (CV mean ± std) | AUC-ROC (CV mean ± std) | 95% CI AUC | Apple Watch |
-|---|---|---|---|---|---|
-| Random Forest | Clinical (19 feat) | 0.887 ± 0.041 ✅ | 0.940 ± 0.007 ✅ | 0.930 – 0.949 | N/A |
-| XGBoost | Clinical (19 feat) | 0.901 ± 0.034 ✅ | 0.931 ± 0.007 ✅ | 0.921 – 0.940 | N/A |
-| CNN-LSTM (CPSC only) | ECG Lead I | 0.931 ✅ | 0.968 ✅ | — | ~50% ❌ |
-| RR + RF (Traditional) | ECG Lead I | 0.877 | 0.957 ✅ | — | 49/54 = 91% ✅ |
-| **CNN-LSTM (Combined)** | **ECG Lead I** | **0.927** ✅ | **0.974** ✅ | — | **34/36 = 94%** ✅ |
-| CNN-LSTM (3-fold CV) | ECG Lead I | *see cv_results.json* | *see cv_results.json* | *see cv_results.json* | — |
+All numbers below come from the **pre-registered, leakage-safe** run in
+`docs/results/<run_id>/` (patient-grouped CPSC hold-out, $n{=}1{,}376$, Lead I).
+The headline is the **controlled comparison**: a device-agnostic timing model is
+statistically indistinguishable from a deep model on matched data.
 
-> **Note on XGBoost test-set recall:** Single test-set recall is 0.980 at threshold=0.30, but the 95% bootstrap CI on n=92 is **0.936–1.000** — a 6.4-point range. The 5-fold CV recall of **0.901 ± 0.034** is the more reliable estimate. Both are reported for transparency.
+| Model | Input | AUC (hold-out) | Notes |
+|---|---|---|---|
+| RR + RF (device-agnostic) | ECG Lead I | **0.935** | timing features only |
+| CNN-LSTM (CPSC only) | ECG Lead I | **0.949** | vs RR: ΔAUC −0.013, **DeLong p = 0.33 (n.s.)** |
+| CNN-LSTM (combined) | ECG Lead I | 0.975 | data-asymmetric *deployment* model (adds PhysioNet 2017) |
+| Random baseline | ECG Lead I | 0.502 | sanity floor |
+| Random Forest (clinical) | Clinical (separate cohort) | 0.954 | distinct population — not fused |
+| XGBoost (clinical) | Clinical (separate cohort) | 0.927 | threshold via F-β (β=2) |
 
-**Paper-readiness note:** headline ECG and clinical metrics must be regenerated
-from the pre-registered HPC run in `docs/results/<run_id>/` before submission.
-The former “30-minute lead time” claim has been retired; the current analysis
-reports detection latency after verified AFib onset plus normal-phase false
-positives.
+**Cross-device (device-agnostic RR + RF, zero-shot):** MIT-BIH Holter AUC **0.907**;
+Apple Watch accuracy **0.91 (95% CI 0.80–0.96)** — *exploratory* (54 recordings,
+one confirmed AFib, device-classifier labels).
 
-### Cross-Device Generalization (RR + RF)
-
-| Test Set | Device | Result |
-|---|---|---|
-| CPSC 2018 (5-fold CV) | Hospital 12-lead, 500 Hz | AUC = 0.957 |
-| Apple Watch (4 people, 54 recordings) | Consumer wearable, 512 Hz | 49/54 = 91% |
-| MIT-BIH AFib (25 patients, 28,104 windows) | Ambulatory Holter, 250 Hz | AUC = 0.909 |
+> **Scope:** CardioWatch detects **atrial fibrillation → stroke prevention**, not
+> heart attacks. Clinical+ECG **fusion is exploratory** (cross-population). The old
+> "30-minute lead time" claim is retired; detection is near-instant once AFib is
+> present, and an exploratory **onset-prediction** analysis is modest (AUC ≈ 0.66).
 
 ---
 
 ## 🔑 Key Finding — Domain Gap
 
-CNN-LSTM trained on hospital ECGs (CPSC 2018, 500 Hz) scores **~0.50 (random chance)** on Apple Watch recordings. Root cause: the model learns device-specific waveform patterns, not device-agnostic cardiac patterns.
+A CNN-LSTM trained only on hospital ECGs (CPSC 2018, 500 Hz) drops to **~0.50 (random chance)** on Apple Watch recordings. Root cause: the model learns device-specific waveform patterns, not device-agnostic cardiac patterns.
 
 **Two solutions implemented:**
-- **RR + RF (Traditional ML):** Device-agnostic RR interval timing features. AUC=0.957, **49/54 = 91%** on Apple Watch across 4 people (1 female, 3 male). Validated on MIT-BIH Holter data with AUC=0.909 — zero-shot cross-device.
-- **CNN-LSTM Combined:** Train on CPSC 2018 + PhysioNet 2017 (AliveCor wearable). AUC=0.974, **34/36 = 94%** on Apple Watch. Beats CPSC-only model on both metrics.
+- **RR + RF (device-agnostic):** timing features only. Pre-registered CPSC hold-out AUC **0.935** (indistinguishable from the deep model, DeLong p=0.33); zero-shot MIT-BIH Holter AUC **0.907**; Apple Watch **49/54** (exploratory). Transfers across devices with no retraining.
+- **CNN-LSTM combined:** trained on CPSC 2018 + PhysioNet 2017 (AliveCor wearable). CPSC hold-out AUC **0.975** — a data-asymmetric *deployment* model (more, heterogeneous training data), not a same-data comparison.
 
 Consistent with Bahrami Rad et al. (2024): device-agnostic features generalize across platforms; deep learning features do not without cross-device training.
 
@@ -378,21 +376,22 @@ mlflow ui   # open localhost:5000
 #### Solution 2 — Combined CNN-LSTM Training
 - Combined dataset: CPSC 2018 (hospital, 500 Hz) + PhysioNet 2017 (AliveCor wearable, 300→500 Hz)
 - Total: 15,121 recordings, 1,959 AFib (13%), pos_weight=6.72
-- **Combined best checkpoint (epoch 38): AUC-ROC 0.974 | Recall 0.927 | Apple Watch 34/36 = 94%**
-- Combined model beats CPSC-only on both CPSC AUC (0.974 vs 0.968) AND Apple Watch accuracy
+- Pre-registered CPSC hold-out AUC **0.975** — a data-asymmetric *deployment* model (more, heterogeneous training data), not a same-data comparison with the CPSC-only model (0.949) or RR+RF (0.935).
 
 ---
 
 ## Apple Watch Validation Results
 
-Real Apple Watch ECG exports tested from 4 volunteers (1 female, 3 male), 54 total recordings.
-1 confirmed AFib recording correctly classified by both models.
+Real Apple Watch ECG exports from 4 volunteers, 54 recordings with **one** confirmed
+AFib. **Exploratory only:** with a single positive, "accuracy" is dominated by
+specificity and sensitivity is effectively unmeasured; labels are the watch's own
+classifier, not clinical adjudication.
 
-| Model | Apple Watch Accuracy | Notes |
+| Model | Apple Watch (exploratory) | Notes |
 |---|---|---|
-| CNN-LSTM (CPSC only) | ~50% ❌ | Domain gap — random chance |
-| RR + RF (Traditional) | 49/54 = 91% ✅ | Device-agnostic timing features |
-| CNN-LSTM (Combined) | 34/36 = 94% ✅ | Combined training closed domain gap |
+| CNN-LSTM (CPSC only) | ~0.50 ❌ | Domain gap — random chance |
+| RR + RF (device-agnostic) | 49/54, acc 0.91 (95% CI 0.80–0.96) | timing features, no retraining |
+| CNN-LSTM (combined) | acc 0.91 (95% CI 0.80–0.96) | deployment model |
 
 **Per-person breakdown (RR + RF):**
 
@@ -405,17 +404,22 @@ Real Apple Watch ECG exports tested from 4 volunteers (1 female, 3 male), 54 tot
 
 ---
 
-## Evaluation Targets
+## Evaluation Summary (pre-registered hold-out)
 
-| Metric | Target | CNN-LSTM Combined | CNN-LSTM CPSC | RF (5-fold CV) | XGBoost (5-fold CV) |
+Reported as measured numbers, not pass/fail "targets." ECG models are on the
+patient-grouped CPSC hold-out (n=1,376, Lead I); clinical models on their own
+test split (separate cohort).
+
+| Metric | RR + RF | CNN-LSTM (CPSC) | CNN-LSTM (combined) | RF (clinical) | XGBoost (clinical) |
 |---|---|---|---|---|---|
-| Recall | ≥ 93% | 92.7% ✅ | **93.1%** ✅ | 88.7% ± 4.1% | 90.1% ± 3.4% |
-| AUC-ROC | Maximize | **0.974** ✅ | 0.968 ✅ | 0.940 ± 0.007 ✅ | 0.931 ± 0.007 ✅ |
-| 95% CI AUC | — | — | — | 0.930 – 0.949 | 0.921 – 0.940 |
-| F1-Score | Maximize | 0.785 | 0.844 | 0.871 ± 0.012 | 0.861 ± 0.005 |
-| Detection latency | Lower is better | Recompute via bootstrap transitions | — | — | — |
-| Apple Watch | Maximize | **94%** ✅ | ~50% ❌ | N/A | N/A |
-| Cross-Validation | 5-fold | 3-fold CV ✅ | ✅ | ✅ | ✅ |
+| AUC | 0.935 | 0.949 | 0.975 | 0.954 | 0.927 |
+| Recall | 0.803 | 0.959 | 0.918 | 0.941 | 0.961 |
+| F1 | 0.679 | 0.701 | 0.837 | 0.914 | 0.852 |
+
+Primary controlled comparison: RR + RF vs CNN-LSTM (CPSC), ΔAUC −0.013, **DeLong
+p = 0.33, McNemar p = 0.40 (Holm)** — not significant. Cross-device (RR, zero-shot):
+MIT-BIH AUC 0.907. Detection latency: near-instant once AFib present (not a
+lead-time claim). Onset prediction (exploratory): pooled AUC ≈ 0.66.
 
 ---
 
