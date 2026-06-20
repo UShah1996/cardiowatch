@@ -361,10 +361,13 @@ fused_prob = None
 # ═══════════════════════════════════════════════════════════════════════
 # MAIN PANEL
 # ═══════════════════════════════════════════════════════════════════════
-st.title("🫀 CardioWatch — Live Cardiac Risk Monitor")
+st.title("🫀 CardioWatch — AFib Detection for Stroke Prevention")
 st.markdown(
-    "Multi-modal cardiac risk: **Random Forest / XGBoost** (clinical) + "
-    "**CNN-LSTM** (ECG AFib detection) — calibrated late fusion"
+    "Device-agnostic **single-lead atrial-fibrillation detection** on "
+    "consumer wearables. Catching AFib early enables anticoagulation that "
+    "prevents strokes. _Detects atrial fibrillation — **not** heart attacks._ "
+    "A clinical risk model and clinical+ECG fusion are shown as separate, "
+    "exploratory components."
 )
 
 # Demo mode banner
@@ -376,42 +379,36 @@ if not os.path.exists('data/processed/rf_model.pkl'):
         "See [github.com/UShah1996/cardiowatch](https://github.com/UShah1996/cardiowatch)."
     )
 
-# ── Section 0: Fusion architecture explainer ─────────────────────────
-with st.expander("ℹ️ How CardioWatch works — Fusion Architecture", expanded=False):
+# ── Section 0: Architecture explainer (fusion = exploratory) ─────────
+with st.expander("ℹ️ How CardioWatch works — architecture (fusion is exploratory)", expanded=False):
     weight_rf  = fusion_model.weight_rf  if (fusion_model and fusion_model.fitted) else 0.60
     weight_ecg = fusion_model.weight_ecg if (fusion_model and fusion_model.fitted) else 0.40
     st.markdown(f"""
-CardioWatch uses **late fusion** — each model specialises in its own data type,
-then their calibrated scores are combined:
+The **validated** product is single-lead **AFib detection** from the ECG. A
+clinical risk model and a clinical+ECG **late fusion** are shown as separate,
+**exploratory** components — not a validated joint-patient score.
 
 ```
 Patient's clinical data          Patient's Apple Watch ECG
 (Age, BP, Cholesterol...)        (Lead I, 30s at 512 Hz)
         │                                   │
         ▼                                   ▼
-Random Forest / XGBoost            CNN-LSTM (AUC=0.974)
-(AUC=0.940 / 0.931)               AFib detection
+Random Forest / XGBoost            CNN-LSTM  (AFib detection)
+(separate clinical cohort)         (CPSC hold-out AUC 0.949)
         │                                   │
-        │  clinical_prob (calibrated)       │  ecg_prob (calibrated)
         └──────────────┬────────────────────┘
                        ▼
-         Fused = {weight_rf:.2f} × clinical + {weight_ecg:.2f} × ECG
-                  (weights learned from data, not hardcoded)
+         Fused = {weight_rf:.2f} × clinical + {weight_ecg:.2f} × ECG   (EXPLORATORY)
                        ▼
               Alert if fused > threshold
 ```
 
-**Fusion method:** {fusion_label}
-
-**Why late fusion?** Each model learns what it's best at — RF/XGBoost learns
-tabular clinical risk, CNN-LSTM learns temporal ECG rhythm patterns.
-
-**Documented limitation:** RF and CNN-LSTM were trained on separate patient
-populations (Kaggle clinical dataset vs CPSC ECG recordings). Fusion weights
-were learned on CPSC validation set ECG scores paired with sampled clinical
-scores — not from the same patients. Real-world fusion would require a dataset
-where each patient has both ECG recordings and clinical features.
-    """)
+**⚠️ Why fusion is exploratory:** the clinical and ECG models are trained on
+**different patient populations** (Kaggle clinical data vs CPSC ECG), so their
+scores are not combined per patient — the weights were learned from CPSC
+validation ECG scores paired with *sampled* clinical scores. A deployable fused
+score would require one cohort where each patient has both an ECG and clinical
+data. Treat the fused number as illustrative only.""")
 
 # ── Section 1: Model comparison banner ───────────────────────────────
 if xgb_model is not None:
@@ -489,42 +486,43 @@ with col3:
 st.divider()
 
 # ── Section 3: CNN-LSTM performance panel ─────────────────────────────
-st.subheader("🧠 CNN-LSTM — AFib Detection Performance")
+st.subheader("🧠 CNN-LSTM — AFib Detection (pre-registered hold-out)")
 
-# Show combined model numbers if available, otherwise CPSC-only
+# Numbers below come from the pre-registered, leakage-safe, patient-grouped
+# CPSC hold-out (n=1,376, Lead I). See docs/results/<run_id>/paper_tables.md.
 if 'Combined' in cnn_label or 'CV' in cnn_label:
-    auc_display    = "0.974"
-    recall_display = "92.7%"
-    f1_display     = "0.785"
-    precision_disp = "—"
+    auc_display    = "0.975"
+    recall_display = "91.8%"
+    f1_display     = "0.837"
+    auc_delta      = "combined-data deployment model"
     caption_text   = (
-        f"Loaded: {cnn_label} · "
-        "Trained on CPSC 2018 + PhysioNet 2017 (15,121 recordings) · "
-        "Lead I only · 500 Hz"
+        f"Loaded: {cnn_label}. Combined-data *deployment* model "
+        "(CPSC 2018 + PhysioNet 2017) — higher because it trains on more, "
+        "heterogeneous data, not a same-data comparison. On the same hold-out the "
+        "device-agnostic RR+RF model scores AUC 0.935 — statistically "
+        "indistinguishable from the CPSC-only CNN-LSTM (0.949; DeLong p=0.33)."
     )
-    aw_note = "94% on real Apple Watch data (34/36 recordings)"
+    aw_note = "exploratory: 0.91 (CI 0.80–0.96)"
 else:
-    auc_display    = "0.968"
-    recall_display = "93.1%"
-    f1_display     = "0.844"
-    precision_disp = "77.3%"
+    auc_display    = "0.949"
+    recall_display = "95.9%"
+    f1_display     = "0.701"
+    auc_delta      = "leakage-safe CPSC hold-out"
     caption_text   = (
-        f"Loaded: {cnn_label} · "
-        "Trained on CPSC 2018 only (6,877 recordings) · "
-        "⚠️ Domain gap on Apple Watch (~50%)"
+        f"Loaded: {cnn_label}. CPSC-only model on the pre-registered hold-out. "
+        "⚠️ Domain gap: ~0.50 (chance) on Apple Watch — recovered only by adding "
+        "wearable training data."
     )
-    aw_note = "~50% on Apple Watch (domain gap)"
+    aw_note = "~0.50 (domain gap)"
 
 p1, p2, p3, p4 = st.columns(4)
 with p1:
-    st.metric("AUC-ROC",  auc_display,
-              delta="≈ Apple FDA-cleared (~0.970)", delta_color="normal")
+    st.metric("AUC-ROC",  auc_display, delta=auc_delta, delta_color="off")
 with p2:
-    st.metric("Recall",   recall_display,
-              delta="Target ≥93%", delta_color="normal")
+    st.metric("Recall",   recall_display, delta="hold-out, thr 0.40", delta_color="off")
 with p3:
-    st.metric("Apple Watch", aw_note if 'Combined' in cnn_label or 'CV' in cnn_label
-              else "~50% (domain gap)")
+    st.metric("Apple Watch", aw_note,
+              delta="exploratory, 1 AFib case", delta_color="off")
 with p4:
     st.metric("F1 Score",    f1_display)
 
@@ -552,15 +550,17 @@ ecg_model_choice = st.radio(
 
 if ecg_model_choice == "RR Intervals (Traditional ML)":
     st.info(
-        "**RR Interval method** detects AFib by measuring heartbeat timing irregularity. "
-        "Device-agnostic — validated on Apple Watch (91%), MIT-BIH Holter (AUC=0.909), "
-        "and CPSC clinical ECGs (AUC=0.957) with no cross-device retraining."
+        "**RR Interval method** — device-agnostic heartbeat-timing features. "
+        "Pre-registered CPSC hold-out AUC 0.935 (statistically indistinguishable "
+        "from the deep model, DeLong p=0.33); zero-shot MIT-BIH Holter AUC 0.907; "
+        "Apple Watch exploratory (49/54), no cross-device retraining."
     )
 else:
     st.info(
-        f"**CNN-LSTM method** ({cnn_label}). "
-        "Combined training on CPSC 2018 + PhysioNet 2017 closed the domain gap: "
-        "AUC=0.974 on clinical ECGs, 94% on Apple Watch (34/36 recordings)."
+        f"**CNN-LSTM method** ({cnn_label}). Pre-registered CPSC hold-out AUC "
+        "0.949 (CPSC-only) / 0.975 (combined-data deployment). Apple Watch is "
+        "exploratory: accuracy 0.91 (95% CI 0.80–0.96) on 54 recordings with one "
+        "confirmed AFib case (device-classifier labels, not clinical adjudication)."
     )
 
 if ecg_model_choice == "CNN-LSTM (Deep Learning)" and not cnn_ready:
@@ -695,7 +695,7 @@ if uploaded is not None:
                 )
             with ecg_col2:
                 st.metric(
-                    "⚡ Fused Risk Score", f"{fused_prob:.1%}",
+                    "⚡ Fused Score (exploratory)", f"{fused_prob:.1%}",
                     delta="⚠️ HIGH" if fused_prob >= THRESHOLD else "✅ Normal"
                 )
             with ecg_col3:
