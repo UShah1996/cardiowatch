@@ -1,0 +1,330 @@
+% CardioWatch — manuscript draft (Overleaf-ready).
+% Compiles with pdfLaTeX on Overleaf as-is (standard article class).
+% For PSB submission, port the body into the World Scientific ws-procs template.
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{authblk}
+\usepackage{caption}
+
+\title{Device-Agnostic Detection of Atrial Fibrillation on Consumer
+Wearables: A Pre-Registered Cross-Device Evaluation}
+
+\author[1]{Urmi Shah}
+\affil[1]{Department of Computer Engineering, San Jose State University}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Atrial fibrillation (AFib) is a common heart-rhythm disorder and a major,
+largely preventable cause of stroke; many cases go undiagnosed. Consumer
+smartwatches that record a single-lead electrocardiogram (ECG) could help find
+these cases earlier, but a model trained on one type of device often fails on
+another. We study this cross-device problem directly. On a pre-registered,
+leakage-safe, patient-grouped hold-out from a hospital 12-lead corpus
+(CPSC~2018, $n{=}1{,}376$ records, Lead~I only), we compare a lightweight,
+device-agnostic model that uses only heartbeat-timing features (RR~+~random
+forest) against a deep convolutional--recurrent network (CNN-LSTM) trained on
+the same data. The two are statistically indistinguishable
+(AUC $0.935$ vs.\ $0.949$; DeLong $p{=}0.33$, McNemar $p{=}0.40$, Holm-corrected),
+and the timing-based model transfers without retraining to ambulatory Holter
+recordings (AUC $0.907$) and to real Apple~Watch exports (accuracy $0.907$, 95\%
+CI $0.80$--$0.96$). A deep model additionally trained on wearable data
+(AliveCor) reaches AUC $0.975$ but is not a same-data comparison. As an
+exploratory extension, we test whether AFib onset can be predicted from
+pre-onset sinus rhythm; using personalized timing and atrial-ectopy features
+across two Holter cohorts (104 patients) we obtain only modest, sub-clinical
+discrimination (AUC $0.66$). All headline numbers come from a single
+pre-registered run and are released for reproduction. Our results argue that for
+wearable AFib screening, simple device-agnostic features are competitive with
+deep models and generalize better across hardware.
+\end{abstract}
+
+\section{Introduction}
+Atrial fibrillation is the most common sustained arrhythmia and a leading cause
+of ischemic stroke, yet a large share of cases are silent and undiagnosed.
+Because the clinical benefit of finding AFib is timely anticoagulation that
+prevents strokes, tools that detect it during everyday life are valuable.
+Smartwatches that record a single-lead ECG (for example, Apple~Watch Series~4
+and later) put such a tool in tens of millions of hands. The ECG signature of
+AFib---absent P~waves and irregular beat-to-beat timing---is visible in a single
+lead, which makes single-lead detection feasible in principle.
+
+A practical obstacle stands in the way. Models trained on one recording device
+often degrade sharply on another because they learn hardware-specific waveform
+quirks rather than the underlying cardiac pattern. We refer to this as the
+\emph{cross-device gap}. This paper asks a focused question: for single-lead
+AFib detection that must run on consumer wearables, do we need deep waveform
+models, or are simple device-agnostic features enough? We make three
+contributions.
+\begin{enumerate}
+  \item A \textbf{pre-registered, leakage-safe controlled comparison} of a
+  device-agnostic timing model against a deep model, trained on the same data
+  and scored on the same held-out records, with paired significance testing.
+  \item A \textbf{cross-device evaluation} of the timing model on three unseen
+  hardware types---hospital 12-lead, ambulatory Holter, and Apple~Watch---without
+  retraining.
+  \item An \textbf{honest exploratory study} of AFib \emph{onset} prediction from
+  pre-onset sinus rhythm, reported with its limitations rather than overstated.
+\end{enumerate}
+We deliberately scope the work to AFib detection and stroke prevention; it does
+not address heart-attack (myocardial infarction) prediction, which is a
+different condition with a different ECG signature.
+
+\section{Related Work}
+Single-lead AFib detection has been studied extensively since the PhysioNet/CinC
+2017 challenge on short AliveCor recordings~\cite{clifford2017af}, and large
+prospective work established that smartwatch screening can surface undiagnosed
+AFib~\cite{perez2019appleheart}. Closest to our setting,
+Bahrami~Rad~et~al.~\cite{bahramirad2024crowdsourced} combine open detectors and
+report that timing-based features transfer across AliveCor and Apple~Watch
+better than learned waveform features. Our study differs by running a
+\emph{pre-registered, same-data} statistical comparison of a timing model
+against a deep model and by adding a separate, clearly labeled onset-prediction
+analysis. Onset prediction itself has a long history beginning with the PAF
+Prediction Challenge~\cite{moody2001paf}; we revisit it on continuous Holter
+data with patient-grouped evaluation.
+
+\section{Data and Methods}
+
+\subsection{Datasets}
+We use five public or personally exported sources. CPSC~2018 (within the
+PhysioNet/CinC~2020 corpus~\cite{alday2020classification}) provides hospital
+12-lead ECGs, from which we take Lead~I only. PhysioNet/CinC~2017 provides
+single-lead AliveCor recordings~\cite{clifford2017af}. The MIT-BIH Atrial
+Fibrillation Database (\texttt{afdb}) and the Long-Term AF Database
+(\texttt{ltafdb}) provide annotated ambulatory Holter
+recordings~\cite{moody1983afdb,petrutiu2007ltaf,goldberger2000physionet}. A
+small set of personal Apple~Watch exports (54 recordings, four volunteers, one
+confirmed AFib) is used only for real-world validation; its labels are the
+watch's own classifier output and are not independent clinical adjudication. A
+separate tabular clinical dataset is used to train a clinical risk model that we
+report as a distinct cohort.
+
+\subsection{Models}
+The \textbf{device-agnostic model} (RR~+~RF) detects AFib from heartbeat-timing
+features only---coefficient of variation, RMSSD, pNN50, sample entropy, and
+related statistics of the RR-interval series---fed to a random forest. Because
+these features measure timing rather than waveform shape, they are insensitive
+to device sampling rate and gain. The \textbf{deep model} (CNN-LSTM) is a
+three-block 1D convolutional encoder followed by a two-layer LSTM and a linear
+head, trained on 10-second Lead~I windows. A clinical risk model (random forest
+and gradient boosting on tabular risk factors) is trained and reported
+separately, since it uses a different patient population and is not fused into a
+device-deployable score.
+
+\subsection{Pre-registered evaluation protocol}
+To avoid the common pitfall of comparing models trained on different data, we
+fixed the analysis before training. We created a deterministic, label-stratified
+hold-out of CPSC records (20\%, fixed seed) after checking for one-record-per-
+patient, and excluded these records from \emph{both} models' training. The
+device-agnostic model and a CPSC-only deep model were then scored on the
+identical hold-out. Decision thresholds were frozen on training/validation data,
+never on the hold-out. The primary discrimination test is the paired DeLong test
+on AUC~\cite{delong1988comparing,sun2014fast}; the primary threshold-level test
+is McNemar's test on correctness vectors. A single pre-registered Holm
+family~\cite{holm1979simple} (DeLong plus fixed-threshold McNemar across the
+model-versus-model pairs) controls multiple comparisons; matched-specificity and
+random-baseline comparisons are reported as raw sensitivity and sanity checks.
+Class imbalance during training was handled with SMOTE applied \emph{inside}
+each cross-validation fold to prevent leakage~\cite{chawla2002smote}.
+Proportion metrics carry Wilson confidence intervals.
+
+\subsection{Exploratory onset prediction}
+Separately, we test whether imminent AFib can be predicted from sinus rhythm.
+From continuous Holter records we label 30-second sinus windows as
+\emph{pre-onset} (a true onset follows within 30 minutes) or \emph{control} (no
+onset within 60 minutes), excluding windows already in AFib. Features combine
+RR/HRV statistics with neurokit2~\cite{makowski2021neurokit} atrial-ectopy and
+expanded HRV markers, each z-scored against the patient's own control-window
+baseline (personalization). Evaluation uses patient-grouped cross-validation
+pooled over \texttt{afdb} and \texttt{ltafdb}; the operating threshold is set at
+a fixed control specificity on out-of-fold scores, and we report onset
+sensitivity, false alarms per hour, and the distribution of lead times.
+
+\section{Results}
+
+\subsection{Clinical risk model (separate cohort)}
+Table~\ref{tab:clinical} reports the tabular clinical models on their own test
+split. These are shown for completeness and are not combined with the ECG models.
+
+\begin{table}[t]
+\centering
+\caption{Clinical risk models on the held-out clinical test split (distinct
+cohort from the ECG data; not a cross-modal comparison).}
+\label{tab:clinical}
+\begin{tabular}{lcccc}
+\toprule
+Model & AUC & Recall & Specificity & F1 \\
+\midrule
+Random forest & 0.954 & 0.941 & 0.854 & 0.914 \\
+Gradient boosting & 0.927 & 0.961 & 0.634 & 0.852 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Controlled ECG comparison}
+On the pre-registered hold-out (Table~\ref{tab:ecg}), the device-agnostic timing
+model and the CPSC-only deep model are statistically indistinguishable
+(Table~\ref{tab:stats}): the AUC difference is $-0.013$ (95\% CI $-0.032$ to
+$0.006$), DeLong $p{=}0.33$ and McNemar $p{=}0.40$ after Holm correction. The
+deep model additionally trained on wearable data reaches AUC $0.975$ and is
+significantly higher, but this is a deployment comparison with more and
+different training data, not a same-data test. A random baseline confirms the
+pipeline (AUC $0.502$). Figure~\ref{fig:roc} shows the ROC curves.
+
+\begin{table}[t]
+\centering
+\caption{ECG models on the pre-registered CPSC hold-out ($n{=}1{,}376$, Lead~I).
+Thresholds frozen on non-hold-out data.}
+\label{tab:ecg}
+\begin{tabular}{lccccc}
+\toprule
+Model & AUC & Recall & Specificity & F1 & Threshold \\
+\midrule
+RR~+~RF (device-agnostic) & 0.935 & 0.803 & 0.879 & 0.679 & 0.40 \\
+CNN-LSTM (CPSC only) & 0.949 & 0.959 & 0.832 & 0.701 & 0.40 \\
+CNN-LSTM (combined, deployment) & 0.975 & 0.918 & 0.941 & 0.837 & 0.40 \\
+Random baseline & 0.502 & 0.508 & 0.511 & 0.269 & 0.50 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Paired statistical comparisons on the hold-out. $\Delta$AUC and DeLong
+test the discrimination difference; McNemar tests correctness at frozen
+thresholds. $p$(Holm) is corrected across the model-versus-model family.}
+\label{tab:stats}
+\begin{tabular}{lcccc}
+\toprule
+Comparison & $\Delta$AUC (95\% CI) & DeLong $p$(Holm) & McNemar $p$(Holm) \\
+\midrule
+RR~+~RF vs.\ CNN-LSTM (CPSC) & $-0.013$ ($-0.032$, $0.006$) & 0.33 & 0.40 \\
+RR~+~RF vs.\ CNN-LSTM (combined) & $-0.040$ ($-0.053$, $-0.027$) & $1.5\times10^{-8}$ & $1.7\times10^{-10}$ \\
+CNN-LSTM (CPSC) vs.\ (combined) & $-0.027$ ($-0.040$, $-0.013$) & $2.8\times10^{-4}$ & $1.7\times10^{-17}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-device generalization}
+Without any retraining, the device-agnostic model transfers across hardware
+(Table~\ref{tab:crossdevice}): AUC $0.907$ on ambulatory Holter (MIT-BIH,
+28{,}104 windows from 25 patients) and accuracy $0.907$ (95\% CI $0.80$--$0.96$)
+on real Apple~Watch exports. We stress that the Apple~Watch set has a single
+AFib-positive recording, so its ``accuracy'' is dominated by specificity and its
+sensitivity is effectively unmeasured; the labels are the watch's classifier
+output, not clinical adjudication. These rows are therefore a real-world
+plausibility check, not a sensitivity claim.
+
+\begin{table}[t]
+\centering
+\caption{Zero-shot cross-device performance of the device-agnostic model.
+Apple~Watch is exploratory (single positive; device-classifier labels).}
+\label{tab:crossdevice}
+\begin{tabular}{lcc}
+\toprule
+Test set & Device & Result \\
+\midrule
+CPSC hold-out & Hospital 12-lead (Lead~I) & AUC 0.935 \\
+MIT-BIH AFib & Ambulatory Holter, 250\,Hz & AUC 0.907 \\
+Apple~Watch (54 rec.) & Consumer wearable, 512\,Hz & Acc.\ 0.907 (0.80--0.96) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Detection timing}
+On concatenated normal$\rightarrow$AFib recordings, the detector flags AFib
+within the first analysis window (within 5--10 seconds of onset) in every
+constructed transition, at a normal-rhythm false-alarm rate of about 8\% per
+10-second window. This measures \emph{detection latency}, not advance warning;
+because the onset is abrupt, no pre-onset signal exists to forecast.
+
+\subsection{Exploratory onset prediction}
+Predicting AFib before it begins is a harder, separate problem
+(Table~\ref{tab:onset}, Figure~\ref{fig:onset}). Pooled across two Holter
+cohorts (104 patients, patient-grouped cross-validation), personalized timing
+and atrial-ectopy features give modest but consistent pre-onset discrimination
+(AUC $0.66$; per-cohort $0.64$ and $0.66$). At about $0.5$ false alarms per hour
+the model warns of $28\%$ of onsets a median of $1.2$ minutes ahead (IQR
+$0.3$--$5.6$). Per-patient normalization was essential: without it, one cohort
+sat at chance (AUC $0.54$). We report this as a real but sub-clinical signal,
+not a clinical early-warning system.
+
+\begin{table}[t]
+\centering
+\caption{Exploratory AFib onset prediction (pre-onset sinus; patient-grouped CV).}
+\label{tab:onset}
+\begin{tabular}{lccccc}
+\toprule
+Cohort & Patients & Window AUC & Onset sensitivity & Median lead (min) & FA/h \\
+\midrule
+Pooled & 104 & 0.663 & 0.28 (0.26--0.30) & 1.2 (IQR 0.3--5.6) & 0.48 \\
+MIT-BIH (\texttt{afdb}) & 21 & 0.640 & 0.24 & 2.5 & 0.52 \\
+Long-Term AF (\texttt{ltafdb}) & 83 & 0.662 & 0.29 & 1.2 & 0.48 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+% Copy from docs/results/<run_id>/figures/roc_cpsc_holdout.png
+\includegraphics[width=0.6\linewidth]{figures/roc_cpsc_holdout.png}
+\caption{ROC curves on the pre-registered CPSC hold-out. The device-agnostic
+model and the CPSC-only deep model overlap; the random baseline sits on the
+diagonal.}
+\label{fig:roc}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+% Copy from docs/results/<run_id>/figures/onset_prediction_nk_lead_time.png
+\includegraphics[width=0.6\linewidth]{figures/onset_prediction_nk_lead_time.png}
+\caption{Distribution of lead times for warned AFib onsets in the exploratory
+onset analysis.}
+\label{fig:onset}
+\end{figure}
+
+\section{Discussion}
+The central result is a negative one in the useful sense: on matched data, a
+simple timing-based model is not measurably worse than a deep waveform model for
+single-lead AFib detection, and it transfers across hardware without retraining.
+For a wearable screening setting---where the device, sampling rate, and noise
+profile vary---this favors the simpler, interpretable model. The combined deep
+model scores higher, but only with extra wearable training data; that is a
+statement about data, not architecture.
+
+Several limitations bound our claims. The clinical and ECG models use different
+populations and are not a cross-modal ablation. The Apple~Watch validation is
+small, has one positive case, and relies on device-generated labels, so it
+supports plausibility rather than sensitivity. Detection latency reflects
+near-instant detection after an abrupt onset, not advance warning. The onset
+analysis uses cohorts of selected AFib patients, shows only modest
+discrimination, and is therefore framed as exploratory; richer atrial markers
+(such as P-wave morphology), longer pre-onset context, and purpose-built data
+are the natural next steps.
+
+\section{Conclusion}
+For single-lead AFib detection on consumer wearables, device-agnostic timing
+features match a deep model on matched data and generalize better across
+devices, making them a strong, interpretable default for stroke-prevention
+screening. Predicting AFib before it starts remains hard: our personalized
+features yield a real but sub-clinical early-warning signal that motivates
+future work rather than a deployable alarm.
+
+\section*{Reproducibility}
+All reported numbers come from one pre-registered run. Code, the analysis plan,
+the hold-out manifest checksum, and the compact result files are available in the
+project repository; a versioned snapshot will be archived with a DOI.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\end{document}
