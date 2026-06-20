@@ -57,6 +57,18 @@ _Labels are Apple Watch's on-device classifier output, not independent clinical 
 
 _Transitions are sampled with replacement from a shared record pool; treat as robustness analysis, not independent prospective episodes._
 
+## AFib Onset Prediction (exploratory — pre-onset sinus)
+
+Features: both, per-patient normalized; horizon 30.0 min; patient-grouped CV.
+
+| Cohort | n patients | window AUC | onset sensitivity (95% CI) | median lead time, min | false alarms/h |
+|---|---:|---:|---:|---:|---:|
+| pooled | 104 | 0.663 | 0.28 (0.26–0.30) | 1.2 (IQR 0.3–5.6) | 0.48 |
+| afdb | 21 | 0.640 | 0.24 | 2.5 (IQR 0.5–16.5) | 0.52 |
+| ltafdb | 83 | 0.662 | 0.29 | 1.2 (IQR 0.3–4.9) | 0.48 |
+
+_Exploratory: threshold set at fixed control specificity on out-of-fold scores; modest, sub-clinical signal. Not a clinical early-warning claim._
+
 ## Validity Notes
 
 - Clinical-only and ECG-only models use different cohorts and are reported separately (not a cross-modal ablation).
