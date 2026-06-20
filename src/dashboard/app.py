@@ -46,7 +46,7 @@ def _download_weights_on_startup():
 
     try:
         from huggingface_hub import hf_hub_download
-        from src.dashboard.download_weights import WEIGHTS, REPO_ID
+        from src.dashboard.download_weights import WEIGHTS, OPTIONAL_WEIGHTS, REPO_ID
 
         progress = st.progress(0)
         results  = {}
@@ -79,6 +79,18 @@ def _download_weights_on_startup():
                 results[name] = False
 
             progress.progress((i + 1) / len(WEIGHTS))
+
+        # Optional pre-registered CNN checkpoints — fetch if on the Hub, but
+        # never error if absent (dashboard falls back to legacy checkpoints).
+        for name in OPTIONAL_WEIGHTS:
+            dest = os.path.join(PROCESSED_DIR, name)
+            if os.path.exists(dest) and os.path.getsize(dest) > 500:
+                continue
+            try:
+                hf_hub_download(repo_id=REPO_ID, filename=name,
+                                local_dir=PROCESSED_DIR, local_dir_use_symlinks=False)
+            except Exception:
+                pass
 
         progress.empty()
         n_ok = sum(results.values())
@@ -136,8 +148,9 @@ class _DemoModel:
 def load_models():
     """
     Load all models from data/processed/.
-    Prefers cnn_lstm_combined_best.pt (AUC=0.974) over cnn_lstm_best.pt.
-    Prefers cnn_lstm_cv_best.pt (3-fold CV validated) if available.
+    Prefers the pre-registered hold-out CNN checkpoints
+    (cnn_lstm_combined_deploy.pt / cnn_lstm_cpsc_complement.pt), falling back to
+    the legacy checkpoints if absent.
     Loads CalibratedFusion if fusion_model.pkl exists.
     Falls back to demo mode if weights are not present (Streamlit Cloud).
     """
@@ -186,11 +199,14 @@ def load_models():
         xgb_model     = None
         xgb_threshold = 0.30
 
-    # CNN-LSTM — prefer CV best > combined best > CPSC-only best
+    # CNN-LSTM — prefer the pre-registered hold-out checkpoints; fall back to
+    # the legacy ones so the app still runs if the new weights aren't present.
     cnn_candidates = [
-        ('data/processed/cnn_lstm_cv_best.pt',       'CNN-LSTM (3-fold CV, AUC≈0.971)'),
-        ('data/processed/cnn_lstm_combined_best.pt', 'CNN-LSTM Combined (AUC=0.974)'),
-        ('data/processed/cnn_lstm_best.pt',          'CNN-LSTM CPSC-only (AUC=0.968)'),
+        ('data/processed/cnn_lstm_combined_deploy.pt', 'CNN-LSTM Combined (deployment, hold-out AUC 0.975)'),
+        ('data/processed/cnn_lstm_cpsc_complement.pt', 'CNN-LSTM CPSC (hold-out AUC 0.949)'),
+        ('data/processed/cnn_lstm_combined_best.pt',   'CNN-LSTM Combined (legacy)'),
+        ('data/processed/cnn_lstm_cv_best.pt',         'CNN-LSTM (legacy CV)'),
+        ('data/processed/cnn_lstm_best.pt',            'CNN-LSTM CPSC-only (legacy)'),
     ]
     from src.models.cnn_lstm import build_model
     cnn_model   = build_model(input_length=5000)
@@ -273,7 +289,7 @@ for key in ['risk_history', 'fused_risk_history', 'alert_log']:
 
 # ── Sidebar ───────────────────────────────────────────────────────────
 st.sidebar.title("🫀 Patient Profile")
-st.sidebar.markdown("Adjust parameters to simulate cardiac risk.")
+st.sidebar.markdown("Adjust parameters to explore the clinical AFib/stroke risk model.")
 
 clinical_model_choice = st.sidebar.radio(
     "Clinical Model",

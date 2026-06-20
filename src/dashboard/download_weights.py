@@ -20,6 +20,15 @@ WEIGHTS = [
     'xgb_model.pkl',
 ]
 
+# Pre-registered hold-out CNN checkpoints. Optional: downloaded if present on
+# the Hub, but their absence is never an error (the dashboard falls back to the
+# legacy checkpoints above). Upload these to serve the pre-registered model for
+# live ECG inference.
+OPTIONAL_WEIGHTS = [
+    'cnn_lstm_combined_deploy.pt',
+    'cnn_lstm_cpsc_complement.pt',
+]
+
 
 def ensure_weights(log_fn=print) -> dict:
     """
