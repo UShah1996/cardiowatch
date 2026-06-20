@@ -11,6 +11,10 @@ preprocessing:
     bandpass_low_hz: 0.5
     bandpass_high_hz: 100.0
     sampling_rate_hz: 500
+    # NOTE: the CNN-LSTM trains on 10-second (5000-sample) windows at
+    # 500 Hz — set by ECGDataset.target_len, not by this value.
+    # window_minutes only feeds the legacy ecg_filter.process_record
+    # helper, which is not used in the training pipeline.
     window_minutes: 5
   clinical:
     imputation_strategy: median
@@ -31,14 +35,17 @@ models:
     scale_pos_weight: 5
     random_state: 42
   cnn_lstm:
-    cnn_filters: [32, 64, 128]   # add a 3rd block for more feature extraction
+    # Architecture fields below are read by cnn_lstm.build_model().
+    cnn_filters: [32, 64, 128]
     cnn_kernel_size: 7
     lstm_hidden_size: 128
     lstm_layers: 2
     dropout: 0.3
-    epochs: 50
+    # Training fields below document the values used in
+    # train_cnn_lstm*.py (which set them directly); keep in sync if changed.
+    epochs: 50                   # max epochs; early stopping (patience=7) usually stops sooner
     batch_size: 64
-    learning_rate: 0.001
+    learning_rate: 0.0003        # was 0.001 — corrected to match the training scripts
 
 evaluation:
   cv_folds: 5

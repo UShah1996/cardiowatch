@@ -1,0 +1,20 @@
+{
+  "best_validation_metrics": {
+    "auc": 0.9569399030330364,
+    "f1": 0.7323943661971831,
+    "precision": 0.6046511627906976,
+    "recall": 0.9285714285714286
+  },
+  "checkpoint_path": "data/processed/cnn_lstm_cpsc_complement.pt",
+  "fixed_threshold": 0.4,
+  "legacy_checkpoint_path": "data/processed/cnn_lstm_best.pt",
+  "manifest": "docs/results/20260619-c7bea6b/manifests/cpsc_holdout.json",
+  "manifest_holdout_sha256": "f338fd3bfa6d35314a013757f3a2f6cf59dc34f15e347aff0d93b9e8deafa9cc",
+  "matched_specificity": 0.9,
+  "matched_specificity_threshold": 0.634711515903473,
+  "mode": "cpsc",
+  "model": "CNN-LSTM cpsc",
+  "n_records_total_training_pool": 5501,
+  "n_train_records": 4400,
+  "n_validation_records": 1101
+}

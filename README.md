@@ -11,11 +11,13 @@
 
 ## Overview
 
-CardioWatch is an ML research project that explores whether **temporal patterns in cardiovascular data** can be used for the early detection of heart disease. Rather than predicting *whether* a patient has heart disease, this system aims to estimate **when** a cardiac event might be approaching — providing an early warning window to improve treatment outcomes.
+CardioWatch is an ML research project on **atrial fibrillation (AFib) detection from consumer-wearable ECG**. The goal is reliable, *device-agnostic* AFib detection on single-lead signals like the Apple Watch's — because undiagnosed AFib is a leading and **preventable cause of stroke**, and catching it on everyday wearables enables earlier anticoagulation. The life-saving pathway here is **AFib detection → stroke prevention.**
 
-The system combines structured clinical data with ECG time-series signals, processed through a multi-modal pipeline (Random Forest + XGBoost + CNN-LSTM + RR Traditional ML), and surfaced through a Streamlit risk dashboard with SHAP explainability and Apple Watch ECG integration.
+The system pairs single-lead ECG models (CNN-LSTM and a device-agnostic RR-interval model) with a clinical risk-factor model (Random Forest / XGBoost), surfaced through a Streamlit dashboard with SHAP explainability and Apple Watch ECG integration.
 
-The ECG component is specifically designed around **Atrial Fibrillation (AFib) detection using Lead I only** — the same single-lead signal that Apple Watch Series 4+ already records. Apple Watch explicitly states *"This app is not intended to detect a heart attack"* — CardioWatch addresses that gap by combining real-time ECG with clinical risk factors.
+The ECG component is built around **AFib detection using Lead I only** — the same single-lead signal Apple Watch Series 4+ records.
+
+> **Scope note — AFib, not heart attacks.** CardioWatch detects *atrial fibrillation* (a rhythm disorder), **not** heart attacks / myocardial infarction (a coronary-artery blockage) — these are distinct conditions with different ECG signatures, and Apple Watch likewise states its ECG "is not intended to detect a heart attack." An exploratory AFib *onset-prediction* (early-warning) analysis is included, but it shows only weak, short-lead signal on RR/HRV features and is **not** presented as a clinical early-warning claim. See [results](docs/results/) and the analysis plan.
 
 ---
 
@@ -32,7 +34,11 @@ The ECG component is specifically designed around **Atrial Fibrillation (AFib) d
 
 > **Note on XGBoost test-set recall:** Single test-set recall is 0.980 at threshold=0.30, but the 95% bootstrap CI on n=92 is **0.936–1.000** — a 6.4-point range. The 5-fold CV recall of **0.901 ± 0.034** is the more reliable estimate. Both are reported for transparency.
 
-**All targets met:** Recall ≥93% ✅ | AUC maximized (0.974) ✅ | Lead time ≥30 min ✅ | Apple Watch 94% ✅ | MIT-BIH AUC 0.909 ✅
+**Paper-readiness note:** headline ECG and clinical metrics must be regenerated
+from the pre-registered HPC run in `docs/results/<run_id>/` before submission.
+The former “30-minute lead time” claim has been retired; the current analysis
+reports detection latency after verified AFib onset plus normal-phase false
+positives.
 
 ### Cross-Device Generalization (RR + RF)
 
@@ -115,7 +121,7 @@ cardiowatch/
 ├── docs/
 │   ├── aw_2022_08_23_rpeaks.png       # Apple Watch R-peak detection visualization
 │   ├── lead_time_evaluation.png       # Single operating point (threshold=0.50, rf=0.75)
-│   ├── lead_time_tradeoff.png         # Threshold sweep — lead time vs FP rate tradeoff curve
+│   ├── lead_time_tradeoff.png         # Detection-latency vs FP-rate operating curve
 │   ├── roc_curve_cnn_lstm.png
 │   └── shap_summary.png
 ├── requirements.txt
@@ -184,7 +190,7 @@ Apple Watch preprocessing: skip first 5s (electrode placement artifact) + resamp
 
 Atrial Fibrillation is the world's most common serious arrhythmia, affecting ~37 million people and being a leading cause of stroke. Unlike most arrhythmias, AFib has two unmistakable electrical signatures visible in any single lead — absent P waves and irregular R-R intervals — making it reliably detectable from Lead I alone.
 
-Apple Watch received FDA clearance for AFib detection in 2018. CardioWatch extends this by adding clinical risk factors — filling the gap Apple explicitly leaves open for cardiac event prediction.
+Apple Watch received FDA clearance for AFib detection in 2018. CardioWatch's focus is making that single-lead AFib detection **robust across devices** (hospital, Holter, AliveCor, Apple Watch) — since the clinical value of catching AFib early is **stroke prevention through timely anticoagulation**. The clinical risk-factor model is reported as a separate cohort, not fused into a device-deployable risk score (see limitations).
 
 ---
 
@@ -208,6 +214,24 @@ source venv/bin/activate        # Mac/Linux
 
 pip3 install -r requirements.txt
 ```
+
+### SJSU COE HPC Paper Run
+
+Final PSB-ready numbers should be generated through the SJSU COE
+JupyterHub terminal + SLURM pipeline, not from stale laptop artifacts.
+See `docs/SJSU_COE_HPC_RUNBOOK.md` for the full runbook.
+
+```bash
+git checkout fix/clinical-methodology-and-dashboard
+git pull
+
+bash scripts/hpc/sjsu_setup.sh
+bash scripts/hpc/submit_pipeline.sh
+```
+
+The pipeline writes compact, commit-safe summaries to
+`docs/results/<run_id>/` and keeps raw data/checkpoints under ignored
+`data/raw/` and `data/processed/`.
 
 ### 2. Data Setup
 
@@ -265,7 +289,7 @@ python3 src/models/fusion_calibrated.py              # saves fusion_model.pkl (l
 python3 src/models/rr_afib_detector.py  # saves rr_rf_model.pkl
 
 # Step 7 — Evaluation
-python3 src/evaluation/lead_time.py              # 30-min lead time validation
+python3 src/evaluation/lead_time.py              # detection-latency validation
 python3 src/evaluation/shap_explainer.py         # SHAP plots
 python3 src/evaluation/evaluate_mitbih_afib.py   # MIT-BIH cross-device validation
 
@@ -293,7 +317,7 @@ mlflow ui   # open localhost:5000
 | CNN-LSTM (CPSC) | `python3 src/models/train_cnn_lstm.py` | Best AUC-ROC ≥ 0.96 |
 | CNN-LSTM (Combined) | `python3 src/models/train_cnn_lstm_combined.py` | Best AUC-ROC ≥ 0.97 |
 | RR model | `python3 src/models/rr_afib_detector.py` | AUC-ROC: 0.957, Apple Watch: 6/6 |
-| Lead time | `python3 src/evaluation/lead_time.py` | Lead time ≥ 30 min: MET |
+| Detection latency | `python3 src/evaluation/lead_time.py` | Reports latency after AFib onset + normal-phase FP rate |
 | RF baseline | `python3 src/models/random_forest.py` | Recall ≥ 0.90, AUC ≥ 0.94 |
 | MIT-BIH validation | `python3 src/evaluation/evaluate_mitbih_afib.py` | AUC-ROC ≥ 0.90 |
 | Dashboard | `streamlit run src/dashboard/app.py` | Opens at localhost:8501 |
@@ -334,13 +358,12 @@ mlflow ui   # open localhost:5000
 
 ### Weeks 9–10: Domain Gap Discovery & Solutions
 
-#### Lead-Time Evaluation
+#### Detection-Latency Evaluation
 - Built from real CPSC recordings: 35 min Normal Sinus Rhythm → 31 min AFib
-- **Lead time: 30.0 minutes ✅ Target MET**
-- Threshold sweep across 6 thresholds (0.35–0.60) and 4 patient risk profiles (rf_prob 0.45–0.75):
-  - At rf_prob=0.45–0.55, threshold=0.40–0.60: **30 min lead time, 0 false positives**
-  - Result is robust — not a single cherry-picked threshold
-- ![Lead-time tradeoff](docs/lead_time_tradeoff.png)
+- **Detection latency:** rerun with `src/evaluation/latency_bootstrap.py` for paper-ready median/IQR.
+- Threshold sweep now reports a latency-vs-false-positive operating curve.
+  Bootstrap transitions should be used for the paper-ready median/IQR latency result.
+- ![Detection-latency tradeoff](docs/lead_time_tradeoff.png)
 
 #### Domain Gap Discovery
 - CNN-LSTM (CPSC-only) tested on 6 Apple Watch recordings → all scores ~0.50 (random chance)
@@ -390,7 +413,7 @@ Real Apple Watch ECG exports tested from 4 volunteers (1 female, 3 male), 54 tot
 | AUC-ROC | Maximize | **0.974** ✅ | 0.968 ✅ | 0.940 ± 0.007 ✅ | 0.931 ± 0.007 ✅ |
 | 95% CI AUC | — | — | — | 0.930 – 0.949 | 0.921 – 0.940 |
 | F1-Score | Maximize | 0.785 | 0.844 | 0.871 ± 0.012 | 0.861 ± 0.005 |
-| Lead-Time | ≥ 30 min | **30.0 min** ✅ | — | — | — |
+| Detection latency | Lower is better | Recompute via bootstrap transitions | — | — | — |
 | Apple Watch | Maximize | **94%** ✅ | ~50% ❌ | N/A | N/A |
 | Cross-Validation | 5-fold | 3-fold CV ✅ | ✅ | ✅ | ✅ |
 
@@ -406,7 +429,7 @@ streamlit run src/dashboard/app.py
 - **Fusion explainer:** Collapsible diagram showing how clinical + ECG scores combine
 - **Risk gauge:** Green/yellow/red zones with threshold line (30% XGBoost / 50% RF)
 - **SHAP bar chart:** Top 6 features color-coded red (risk-increasing) / green (risk-reducing)
-- **CNN-LSTM panel:** Always-visible performance metrics (AUC, Recall, lead time)
+- **CNN-LSTM panel:** Always-visible performance metrics (AUC, Recall, detection-latency caveat)
 - **ECG upload:** Apple Watch CSV → CNN-LSTM inference → fused risk score
 - **Rolling history:** Last 30 readings with alert threshold line
 - **Alert log:** Timestamped log of every threshold crossing with model, clinical, ECG, and fused scores

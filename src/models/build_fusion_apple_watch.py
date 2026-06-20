@@ -40,6 +40,8 @@ from src.models.cnn_lstm import build_model
 from src.models.fusion_calibrated import (
     CalibratedFusion, IsotonicCalibrator, build_fusion_from_apple_watch
 )
+from src.evaluation.confidence_intervals import wilson_ci
+from src.experiments.provenance import write_json, write_run_metadata
 
 # ── Config ────────────────────────────────────────────────────────────
 AW_BASE_DIR   = 'data/apple_health_export'
@@ -166,6 +168,10 @@ def preprocess_for_cnn(signal_uv: np.ndarray, fs_in: int = FS_AW) -> np.ndarray:
 def load_cnn_model() -> torch.nn.Module:
     """Load best available CNN-LSTM checkpoint."""
     candidates = [
+        # Pipeline-produced checkpoints (preferred).
+        'data/processed/cnn_lstm_combined_deploy.pt',
+        'data/processed/cnn_lstm_cpsc_complement.pt',
+        # Legacy / standalone names.
         'data/processed/cnn_lstm_cv_best.pt',
         'data/processed/cnn_lstm_combined_best.pt',
         'data/processed/cnn_lstm_best.pt',
@@ -312,6 +318,16 @@ def build_apple_watch_fusion() -> CalibratedFusion:
         }, f, indent=2)
     print(f"\nScoring results saved → {results_path}")
 
+    # ── CNN-LSTM binary accuracy on Apple Watch (threshold 0.5) ───────
+    cnn_preds = (ecg_probs >= 0.5).astype(int)
+    n_correct = int((cnn_preds == labels).sum())
+    acc, acc_lo, acc_hi = wilson_ci(n_correct, n_total)
+    print(f"\nCNN-LSTM Apple Watch accuracy: {n_correct}/{n_total} = {acc:.1%}  "
+          f"(95% CI: {acc_lo:.1%}–{acc_hi:.1%}, Wilson)")
+    print(f"  NOTE: only {n_afib} positive (AFib) recording(s) — the upper "
+          f"bound on sensitivity CI is wide; accuracy is dominated by the "
+          f"non-AFib majority class.")
+
     # ── Compute discrimination metrics ────────────────────────────────
     afib_cnn    = ecg_probs[labels == 1]
     normal_cnn  = ecg_probs[labels == 0]
@@ -322,6 +338,26 @@ def build_apple_watch_fusion() -> CalibratedFusion:
         print(f"  ✓ CNN-LSTM correctly scores AFib higher than non-AFib on Apple Watch")
     elif n_afib > 0:
         print(f"  ✗ CNN-LSTM does not discriminate on this data — check model checkpoint")
+
+    # ── Emit Apple Watch eval JSON into docs/results/<run_id>/ ─────────
+    aw_dir = write_run_metadata(extra={"stage": "apple_watch_eval"})
+    write_json(aw_dir / "apple_watch_eval.json", {
+        "dataset": "Apple Watch personal exports",
+        "device": "Apple Watch (512 Hz, consumer)",
+        "model": "cnn_lstm (best available checkpoint)",
+        "threshold": 0.5,
+        "n": int(n_total),
+        "n_afib": int(n_afib),
+        "accuracy": acc,
+        "accuracy_wilson_ci": [acc_lo, acc_hi],
+        "cnn_on_afib_mean": float(afib_cnn.mean()) if n_afib > 0 else None,
+        "cnn_on_normal_mean": float(normal_cnn.mean()),
+        "ground_truth_note": (
+            "Labels are Apple Watch's on-device classifier output, not "
+            "independent clinical adjudication."
+        ),
+    })
+    print(f"\nWrote Apple Watch eval JSON -> {aw_dir / 'apple_watch_eval.json'}")
 
     # ── Fusion: use CPSC-trained model but validate on AW data ────────
     # With only 1 AFib recording, we cannot retrain the fusion layer.

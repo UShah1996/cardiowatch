@@ -1,0 +1,26 @@
+{
+  "clinical_csv": {
+    "exists": true,
+    "path": "data/raw/heart.csv"
+  },
+  "cpsc": {
+    "expected_min": 6800,
+    "hea_count": 6877,
+    "ok": true,
+    "path": "data/raw/classification-of-12-lead-ecgs-the-physionetcomputing-in-cardiology-challenge-2020-1.0.2/training/cpsc_2018"
+  },
+  "mit_bih_afib": {
+    "dat_count": 23,
+    "expected_min": 20,
+    "ok": true,
+    "path": "data/raw/mit_afib/files"
+  },
+  "ok": true,
+  "physionet_2017": {
+    "expected_min": 8200,
+    "mat_count": 8528,
+    "ok": true,
+    "path": "data/raw/challenge_2017/training2017"
+  },
+  "run_id": "20260619-c7bea6b"
+}

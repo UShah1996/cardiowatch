@@ -26,6 +26,7 @@ from scipy.signal import find_peaks, butter, filtfilt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.metrics import recall_score, precision_score, f1_score, roc_auc_score
+from src.evaluation.confidence_intervals import wilson_ci
 
 PROCESSED_DIR = 'data/processed'
 DATA_DIR      = ('data/raw/classification-of-12-lead-ecgs-the-physionetcomputing'
@@ -352,7 +353,9 @@ def evaluate_apple_watch(model, feature_names, threshold=0.4):
 
     print()
     if total > 0:
-        print(f'Accuracy: {correct}/{total} = {correct/total:.1%}')
+        acc, lo, hi = wilson_ci(correct, total)
+        print(f'Accuracy: {correct}/{total} = {acc:.1%}  '
+              f'(95% CI: {lo:.1%}–{hi:.1%}, Wilson)')
         print(f'\nRR CV interpretation:')
         print(f'  > 0.15 → AFib likely (clinical threshold)')
         print(f'  < 0.05 → Normal sinus rhythm')
@@ -424,8 +427,9 @@ def train_and_evaluate():
     print('-'*60)
     print(f'{"CNN-LSTM (deep learning)":<28} | {"0.968":>8} | {"~0.50 ❌":>11}')
     if total > 0:
-        aw = f'{correct}/{total} = {correct/total:.0%}'
-        print(f'{"RR + RF (traditional ML)":<28} | {"0.957":>8} | {aw:>11}')
+        _, lo, hi = wilson_ci(correct, total)
+        aw = f'{correct}/{total}={correct/total:.0%} [{lo:.0%}-{hi:.0%}]'
+        print(f'{"RR + RF (traditional ML)":<28} | {"0.957":>8} | {aw:>18}')
     print('='*60)
     print('\nKey findings:')
     print('  1. RR features are device-agnostic (timing, not waveform shape)')

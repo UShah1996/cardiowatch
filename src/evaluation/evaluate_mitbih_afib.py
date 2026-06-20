@@ -27,9 +27,18 @@ from sklearn.metrics import (recall_score, precision_score, f1_score,
                              roc_auc_score, confusion_matrix,
                              classification_report)
 from src.models.rr_afib_detector import extract_rr_features
+from src.evaluation.confidence_intervals import wilson_ci
+from src.experiments.provenance import write_json, write_run_metadata
 
 MIT_DIR       = 'data/raw/mit_afib/files'
-MODEL_PATH    = 'data/processed/rr_rf_model.pkl'
+# Prefer the leakage-safe complement RR model trained by the pipeline;
+# fall back to the legacy all-CPSC model name if that is what exists.
+_RR_MODEL_CANDIDATES = [
+    'data/processed/rr_rf_cpsc_complement.pkl',
+    'data/processed/rr_rf_model.pkl',
+]
+MODEL_PATH    = next((p for p in _RR_MODEL_CANDIDATES if os.path.exists(p)),
+                     _RR_MODEL_CANDIDATES[0])
 WINDOW_SEC    = 30     # 30-second windows — matches Apple Watch + PhysioNet 2017
 TARGET_FS     = 500    # resample to match training data
 SRC_FS        = 250    # MIT-BIH native sampling rate
@@ -236,15 +245,61 @@ def evaluate():
     except Exception:
         print("AUC-ROC:   N/A (need both classes)")
 
-    print(f"Recall:    {recall_score(all_labels, all_preds, zero_division=0):.3f}")
+    # Wilson 95% CIs on the proportion metrics (recall over positives,
+    # accuracy over all windows) — large n here, but report for consistency.
+    n_total   = len(all_labels)
+    n_pos     = sum(all_labels)
+    n_tp      = sum(1 for l, p in zip(all_labels, all_preds) if l == 1 and p == 1)
+    n_correct = sum(1 for l, p in zip(all_labels, all_preds) if l == p)
+    rec, rec_lo, rec_hi = wilson_ci(n_tp, n_pos) if n_pos else (0.0, 0.0, 0.0)
+    acc, acc_lo, acc_hi = wilson_ci(n_correct, n_total)
+
+    print(f"Recall:    {rec:.3f}  (95% CI: {rec_lo:.3f}–{rec_hi:.3f}, Wilson)")
     print(f"Precision: {precision_score(all_labels, all_preds, zero_division=0):.3f}")
     print(f"F1:        {f1_score(all_labels, all_preds, zero_division=0):.3f}")
-    print(f"Accuracy:  {sum(l==p for l,p in zip(all_labels,all_preds))/len(all_labels):.3f}")
+    print(f"Accuracy:  {acc:.3f}  (95% CI: {acc_lo:.3f}–{acc_hi:.3f}, Wilson)")
 
     print("\nConfusion matrix (rows=actual, cols=predicted):")
     cm = confusion_matrix(all_labels, all_preds)
     print(f"  TN={cm[0][0]}  FP={cm[0][1]}")
     print(f"  FN={cm[1][0]}  TP={cm[1][1]}")
+
+    # ── Emit a result-table-compatible JSON into docs/results/<run_id>/ ──
+    tn, fp, fn, tp = int(cm[0][0]), int(cm[0][1]), int(cm[1][0]), int(cm[1][1])
+    try:
+        auc_val = float(roc_auc_score(all_labels, all_probs))
+    except Exception:
+        auc_val = None
+    spec = tn / max(tn + fp, 1)
+    ppv = tp / max(tp + fp, 1)
+    npv = tn / max(tn + fn, 1)
+    bal_acc = 0.5 * (rec + spec)
+    mit_metrics = {
+        "n": n_total,
+        "threshold": 0.40,
+        "auc": auc_val,
+        "accuracy": acc,
+        "accuracy_wilson_ci": [acc_lo, acc_hi],
+        "recall": rec,
+        "recall_wilson_ci": [rec_lo, rec_hi],
+        "specificity": float(spec),
+        "balanced_accuracy": float(bal_acc),
+        "ppv": float(ppv),
+        "npv": float(npv),
+        "f1": float(f1_score(all_labels, all_preds, zero_division=0)),
+        "confusion_matrix": {"tn": tn, "fp": fp, "fn": fn, "tp": tp},
+    }
+    out_dir = write_run_metadata(extra={"stage": "mitbih_eval"})
+    write_json(out_dir / "mitbih_eval.json", {
+        "rows": [{
+            "model": "rr_rf",
+            "dataset": "MIT-BIH AFib (afdb, Holter 250 Hz, zero-shot)",
+            "metrics": mit_metrics,
+        }],
+        "n_afib_windows": int(n_pos),
+        "device": "Holter 250 Hz ambulatory",
+    })
+    print(f"\nWrote MIT-BIH eval JSON -> {out_dir / 'mitbih_eval.json'}")
 
     # ── 3-dataset comparison ──────────────────────────────────────────
     print(f"\n{'='*65}")
@@ -253,9 +308,11 @@ def evaluate():
     print(f"{'Dataset':<28} | {'Device':<22} | {'Result'}")
     print('-'*65)
     print(f"{'CPSC 2018 (5-fold CV)':<28} | {'Hospital 12-lead 500Hz':<22} | AUC=0.957")
-    print(f"{'Apple Watch (54 personal)':<28} | {'Wearable 512Hz 4 people':<22} | 49/54=90.7%")
+    aw_p, aw_lo, aw_hi = wilson_ci(49, 54)
+    print(f"{'Apple Watch (54 personal)':<28} | {'Wearable 512Hz 4 people':<22} | "
+          f"49/54={aw_p:.0%} (95% CI {aw_lo:.0%}–{aw_hi:.0%})")
     try:
-        auc_str = f"AUC={auc:.3f}"
+        auc_str = f"AUC={auc:.3f} | Acc {acc:.0%} (CI {acc_lo:.0%}–{acc_hi:.0%})"
     except Exception:
         auc_str = "see above"
     print(f"{'MIT-BIH AFib (25 patients)':<28} | {'Holter 250Hz ambulatory':<22} | {auc_str}")

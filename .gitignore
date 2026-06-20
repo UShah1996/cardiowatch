@@ -1,4 +1,5 @@
 venv/
+.venv*/
 __pycache__/
 *.py[cod]
 data/raw/
@@ -6,6 +7,10 @@ data/processed/
 data/MNIST/
 data/simulated/
 data/apple_health_export/
+data/apple_health_export*.zip
+data/__MACOSX/
+*.zip
+logs/
 *.csv
 *.h5
 *.pkl
@@ -21,9 +26,15 @@ mlruns/
 notebooks/.ipynb_checkpoints/
 *.egg-info/
 dist/
-build/~$*.docx
+build/
 ~$*.xlsx
 ~$*.pptx
 ~$*.docx
 ~$*.xlsx
 ~$*.pptx
+
+# Paper-ready result summaries are intentionally versioned.
+!docs/results/
+!docs/results/**/*.json
+!docs/results/**/*.md
+!docs/results/**/*.png

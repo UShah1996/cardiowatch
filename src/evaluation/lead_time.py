@@ -1,14 +1,29 @@
 """
-lead_time.py — Lead-Time Evaluation for CardioWatch
-Concatenates real verified Normal + AFib CPSC recordings to build
-a long signal with a known AFib onset point, then measures how
-many minutes before the defined event the fused score first alerts.
+lead_time.py — Detection-Latency Evaluation for CardioWatch
+Concatenates real verified Normal + AFib CPSC recordings into one long
+signal with a known AFib onset point, then measures how quickly the
+CNN-LSTM detects AFib after it begins, and how many false alerts it
+raises during the preceding normal-sinus phase.
+
+Why this replaces the old "lead time" metric:
+  The previous version defined the cardiac event as exactly
+  `onset + 30 min` and reported `event_time - first_alert` as "lead
+  time", which made the 30-minute result true by construction. Worse,
+  the "first alert" could be a false positive in the normal phase, so a
+  spurious early alert inflated the reported lead time. A detector
+  trained on AFib morphology cannot predict AFib before it starts on a
+  normal→AFib concatenation; it can only detect it once present. The
+  honest, measurable quantities are therefore:
+
+    - detection latency : minutes from AFib onset to the first true
+                          alert (at or after onset). Lower is better.
+    - normal-phase FPs  : alerts raised during the verified normal-sinus
+                          phase (before onset). Fewer is better.
 
 Signal structure:
   - 35 min of verified Normal Sinus Rhythm recordings
-  - 5  min of verified AFib recordings
-  - Event defined at end of recording (~40 min)
-  - Lead time = time from first alert to event
+  - 31 min of verified AFib recordings
+  - AFib onset = boundary between the two phases (a real, known point)
 
 Usage:
     python3 src/evaluation/lead_time.py
@@ -30,8 +45,6 @@ WEIGHTS_PATH   = 'data/processed/cnn_lstm_combined_best.pt'
 THRESHOLD      = 0.5
 WINDOW_SAMPLES = 5000      # 10s at 500 Hz — must match training
 FS             = 500
-RF_WEIGHT      = 0.6
-ECG_WEIGHT     = 0.4
 DATA_DIR       = ('data/raw/classification-of-12-lead-ecgs-the-physionetcomputing'
                   '-in-cardiology-challenge-2020-1.0.2/training/cpsc_2018')
 NORMAL_CODE    = '426783006'
@@ -39,10 +52,6 @@ AFIB_CODE      = '164889003'
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
-def fuse_scores(rf_prob, ecg_prob):
-    return RF_WEIGHT * rf_prob + ECG_WEIGHT * ecg_prob
-
-
 def preprocess_window(window):
     """Normalize a 10s window — identical to ECGDataset preprocessing."""
     w = window.astype(np.float32)
@@ -82,7 +91,7 @@ def build_real_signal(normal_minutes=35, afib_minutes=5):
     Returns:
         full_signal    : concatenated float32 array
         onset_minutes  : when AFib starts (= end of normal phase)
-        event_minutes  : when the cardiac event occurs (= end of recording)
+        total_minutes  : full signal duration
     """
     normal_paths, afib_paths = [], []
 
@@ -130,18 +139,14 @@ def build_real_signal(normal_minutes=35, afib_minutes=5):
 
     full_signal   = np.concatenate([normal_signal, afib_signal])
     onset_minutes = len(normal_signal) / FS / 60.0
-
-    # Event = end of recording (sustained AFib culminates in event)
-    event_minutes = onset_minutes + 30.0
+    total_minutes = len(full_signal) / FS / 60.0
 
     print(f"  Normal phase : {onset_minutes:.2f} min ({len(normal_signal):,} samples)")
     print(f"  AFib phase   : {len(afib_signal)/FS/60:.2f} min ({len(afib_signal):,} samples)")
-    print(f"  Total signal : {event_minutes:.2f} min")
-    print(f"  AFib onset   : {onset_minutes:.2f} min")
-    print(f"  Event defined: {event_minutes:.2f} min (end of recording)")
-    print(f"  Max lead time: {event_minutes:.2f} min")
+    print(f"  Total signal : {total_minutes:.2f} min")
+    print(f"  AFib onset   : {onset_minutes:.2f} min (boundary between phases)")
 
-    return full_signal, onset_minutes, event_minutes
+    return full_signal, onset_minutes, total_minutes
 
 
 # ── CNN-LSTM inference across full signal ─────────────────────────────
@@ -162,39 +167,58 @@ def ecg_risk_over_time(signal, cnn_model, stride_sec=10):
     return times_min, ecg_probs
 
 
-# ── Lead-time calculation ─────────────────────────────────────────────
-def compute_lead_time(times_min, fused_probs, event_time_min,
-                      threshold=THRESHOLD):
-    """First timestamp where fused score crosses threshold before event."""
-    for t, p in zip(times_min, fused_probs):
-        if p >= threshold and t <= event_time_min:
-            return event_time_min - t, t
+# ── Detection-latency calculation ─────────────────────────────────────
+def compute_detection_latency(times_min, probs, onset_min,
+                              threshold=THRESHOLD):
+    """
+    Minutes from AFib onset to the first alert at or after onset.
+
+    Only alerts at or after the true onset count as detections — an alert
+    in the normal phase is a false positive, not an early detection, and
+    is reported separately by normal_phase_false_positives().
+
+    Returns (latency_minutes, alert_time_minutes), or (None, None) if the
+    model never alerts after onset.
+    """
+    for t, p in zip(times_min, probs):
+        if t >= onset_min and p >= threshold:
+            return t - onset_min, t
     return None, None
 
 
-# ── Main ──────────────────────────────────────────────────────────────
-def evaluate_lead_time(rf_prob=0.75, plot=True):
+def normal_phase_false_positives(times_min, probs, onset_min,
+                                 threshold=THRESHOLD):
     """
-    Full lead-time evaluation using real CPSC recordings.
+    Count alerts during the verified normal-sinus phase (before onset).
 
-    rf_prob=0.75 models a high-risk patient — their elevated clinical
-    score (RF) amplifies even modest ECG signals in the fused score,
-    enabling earlier alerting. This reflects the multi-modal advantage:
-    clinical context makes ECG signals more actionable.
+    Returns (n_false_positives, n_normal_windows, fp_rate).
+    """
+    normal = [(t, p) for t, p in zip(times_min, probs) if t < onset_min]
+    n_normal = len(normal)
+    n_fp     = sum(1 for _, p in normal if p >= threshold)
+    return n_fp, n_normal, n_fp / max(n_normal, 1)
 
-    Fused score = 0.6 * rf_prob + 0.4 * ecg_prob
-    With rf_prob=0.75: base contribution = 0.45
-    ECG only needs to score > 0.125 to push fused score above 0.5.
+
+# ── Main ──────────────────────────────────────────────────────────────
+def evaluate_detection_latency(threshold=THRESHOLD, plot=True):
+    """
+    Detection-latency evaluation using real CPSC recordings.
+
+    Measures the CNN-LSTM's intrinsic ability to detect AFib once it
+    begins — using the ECG probability directly, with no clinical-score
+    inflation — and counts any false alerts in the preceding normal
+    phase. (The threshold × clinical-prior tradeoff is explored
+    separately in lead_time_sweep.py.)
     """
     print("Loading CNN-LSTM model...")
     cnn_model = build_model(input_length=5000)
     cnn_model.load_state_dict(
         torch.load(WEIGHTS_PATH, map_location='cpu'))
     cnn_model.eval()
-    print(f"CNN-LSTM loaded. Using rf_prob={rf_prob} (high-risk patient)\n")
+    print("CNN-LSTM loaded.\n")
 
     print("Building signal from real CPSC recordings...")
-    signal, afib_onset_t, event_time_min = build_real_signal(
+    signal, afib_onset_t, total_min = build_real_signal(
         normal_minutes=35,
         afib_minutes=31
     )
@@ -204,38 +228,35 @@ def evaluate_lead_time(rf_prob=0.75, plot=True):
     times_min, ecg_probs = ecg_risk_over_time(signal, cnn_model, stride_sec=10)
     print(f"Evaluated {len(times_min)} windows.\n")
 
-    fused_probs = [fuse_scores(rf_prob, e) for e in ecg_probs]
-    lead_time, first_alert = compute_lead_time(
-        times_min, fused_probs, event_time_min)
+    latency, first_alert = compute_detection_latency(
+        times_min, ecg_probs, afib_onset_t, threshold)
+    n_fp, n_normal, fp_rate = normal_phase_false_positives(
+        times_min, ecg_probs, afib_onset_t, threshold)
 
     # ── Results ───────────────────────────────────────────────────────
     print("=" * 55)
-    if lead_time is not None:
-        target_met = lead_time >= 29.9
-        print(f"  rf_prob (clinical) : {rf_prob}")
-        print(f"  First alert at     : {first_alert:.2f} min")
-        print(f"  AFib onset         : {afib_onset_t:.2f} min")
-        print(f"  Event at           : {event_time_min:.2f} min")
-        print(f"  Lead time          : {lead_time:.2f} minutes")
-        print(f"  >=30 min target    : {'MET' if target_met else 'NOT MET'}")
+    print(f"  Threshold              : {threshold}")
+    print(f"  AFib onset             : {afib_onset_t:.2f} min")
+    if latency is not None:
+        print(f"  First detection (>=onset): {first_alert:.2f} min")
+        print(f"  Detection latency      : {latency:.2f} min after onset")
     else:
-        print("  No alert triggered before the event.")
-        print("  Try lowering THRESHOLD or increasing rf_prob.")
+        print(f"  First detection        : never (no alert after onset)")
+    print(f"  Normal-phase windows   : {n_normal}")
+    print(f"  Normal-phase false pos : {n_fp} ({fp_rate:.1%})")
     print("=" * 55)
 
     # ── Plot ──────────────────────────────────────────────────────────
     if plot:
         os.makedirs('docs', exist_ok=True)
-        total_min = event_time_min
-        fig, axes = plt.subplots(3, 1, figsize=(14, 11), sharex=False)
+        fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=False)
 
         # Panel 1: Signal morphology comparison
         preview     = WINDOW_SAMPLES
-        sinus_start = 0
         afib_start  = int(afib_onset_t * 60 * FS)
         t_sec       = np.arange(preview) / FS
 
-        axes[0].plot(t_sec, signal[sinus_start: sinus_start + preview],
+        axes[0].plot(t_sec, signal[0: preview],
                      color='steelblue', linewidth=0.8,
                      label='Normal sinus (real CPSC, Lead I)')
         axes[0].plot(t_sec, signal[afib_start: afib_start + preview],
@@ -246,63 +267,46 @@ def evaluate_lead_time(rf_prob=0.75, plot=True):
         axes[0].set_title('Real ECG — Normal Sinus vs AFib Morphology (Lead I)')
         axes[0].legend(fontsize=9)
 
-        # Panel 2: ECG risk over time
+        # Panel 2: ECG risk over time with onset, detection, FP
         axes[1].plot(times_min, ecg_probs, color='steelblue',
                      linewidth=1.5, label='ECG AFib risk (CNN-LSTM)')
+        axes[1].axvspan(0, afib_onset_t, alpha=0.06, color='green',
+                        label='Normal-sinus phase')
         axes[1].axvspan(afib_onset_t, total_min,
-                        alpha=0.08, color='red', label='AFib zone')
+                        alpha=0.08, color='red', label='AFib phase')
         axes[1].axvline(afib_onset_t, color='orange', linestyle=':',
                         linewidth=1.5,
                         label=f'AFib onset ({afib_onset_t:.1f} min)')
-        axes[1].axvline(event_time_min, color='black', linestyle=':',
-                        linewidth=1.5,
-                        label=f'Event ({event_time_min:.1f} min)')
-        axes[1].axhline(THRESHOLD, color='red', linestyle='--',
-                        linewidth=1.5, label=f'Threshold ({THRESHOLD})')
+        axes[1].axhline(threshold, color='red', linestyle='--',
+                        linewidth=1.5, label=f'Threshold ({threshold})')
+        # Mark false positives in the normal phase
+        fp_t = [t for t, p in zip(times_min, ecg_probs)
+                if t < afib_onset_t and p >= threshold]
+        if fp_t:
+            axes[1].scatter(fp_t, [threshold] * len(fp_t), marker='x',
+                            color='black', s=40, zorder=5,
+                            label=f'Normal-phase false pos ({len(fp_t)})')
         if first_alert is not None:
             axes[1].axvline(first_alert, color='limegreen',
                             linestyle='-.', linewidth=2,
-                            label=f'First alert ({first_alert:.1f} min)')
-        axes[1].set_ylabel('AFib probability')
-        axes[1].set_title('CNN-LSTM ECG Risk Over Time')
-        axes[1].legend(fontsize=8)
-        axes[1].set_ylim(-0.05, 1.05)
-        axes[1].set_xlim(0, total_min)
-
-        # Panel 3: Fused risk
-        axes[2].fill_between(times_min, fused_probs,
-                             alpha=0.2, color='crimson')
-        axes[2].plot(times_min, fused_probs, color='crimson', linewidth=2,
-                     label=f'Fused score (RF={rf_prob} × {RF_WEIGHT:.0%} + ECG × {ECG_WEIGHT:.0%})')
-        axes[2].axvspan(afib_onset_t, total_min, alpha=0.08, color='red')
-        axes[2].axvline(afib_onset_t, color='orange', linestyle=':',
-                        linewidth=1.5,
-                        label=f'AFib onset ({afib_onset_t:.1f} min)')
-        axes[2].axvline(event_time_min, color='black', linestyle=':',
-                        linewidth=1.5,
-                        label=f'Event ({event_time_min:.1f} min)')
-        axes[2].axhline(THRESHOLD, color='red', linestyle='--',
-                        linewidth=1.5, label=f'Threshold ({THRESHOLD})')
-        if first_alert is not None:
-            axes[2].axvline(first_alert, color='limegreen',
-                            linestyle='-.', linewidth=2,
-                            label=f'First alert -> {lead_time:.1f} min lead time')
-            axes[2].annotate(
-                f'{lead_time:.1f} min\nlead time',
-                xy=(first_alert, THRESHOLD + 0.04),
-                xytext=(max(0, first_alert - 3), THRESHOLD + 0.20),
+                            label=f'First detection ({first_alert:.1f} min)')
+            axes[1].annotate(
+                f'{latency:.1f} min\nlatency',
+                xy=(first_alert, threshold + 0.04),
+                xytext=(first_alert + 1.5, threshold + 0.20),
                 fontsize=10, color='darkgreen', fontweight='bold',
                 arrowprops=dict(arrowstyle='->', color='darkgreen', lw=1.5)
             )
-        axes[2].set_ylabel('Fused risk score')
-        axes[2].set_xlabel('Time (minutes)')
-        axes[2].set_title(
-            f'Fused Risk Score (rf_prob={rf_prob})  |  Lead time: '
-            + (f'{lead_time:.1f} min' if lead_time else 'No alert triggered')
+        axes[1].set_ylabel('AFib probability')
+        axes[1].set_xlabel('Time (minutes)')
+        axes[1].set_title(
+            f'CNN-LSTM ECG Risk Over Time  |  Detection latency: '
+            + (f'{latency:.1f} min' if latency is not None else 'not detected')
+            + f'  |  Normal-phase FP: {n_fp}/{n_normal}'
         )
-        axes[2].legend(fontsize=8)
-        axes[2].set_ylim(-0.05, 1.05)
-        axes[2].set_xlim(0, total_min)
+        axes[1].legend(fontsize=8)
+        axes[1].set_ylim(-0.05, 1.05)
+        axes[1].set_xlim(0, total_min)
 
         plt.tight_layout()
         out_path = 'docs/lead_time_evaluation.png'
@@ -310,8 +314,8 @@ def evaluate_lead_time(rf_prob=0.75, plot=True):
         print(f"\nPlot saved -> {out_path}")
         plt.close()
 
-    return lead_time, times_min, fused_probs
+    return latency, times_min, ecg_probs
 
 
 if __name__ == '__main__':
-    evaluate_lead_time(rf_prob=0.75, plot=True)
+    evaluate_detection_latency(plot=True)
