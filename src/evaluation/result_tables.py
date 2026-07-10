@@ -151,6 +151,30 @@ def onset_md(o: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def mechanism_md(m: dict[str, Any]) -> str:
+    """Device-separability table — why device-agnostic features transfer."""
+    sep = m.get("device_separability_auc", {})
+    lines = [
+        "## Why Device-Agnostic Features Transfer (mechanism)",
+        "",
+        "Device-separability AUC: can a record-grouped classifier identify the "
+        "recording *device* from each representation? Near **1.0** = the "
+        "representation encodes the device (it will not transfer); near **0.5** = "
+        "device-invariant.",
+        "",
+        "| Device pair | RR/HRV features | CNN-LSTM embedding |",
+        "|---|---:|---:|",
+    ]
+    for pair, e in sep.items():
+        label = pair.replace("_vs_", " vs ").replace("_", " ")
+        lines.append(f"| {label} | {_fmt(e.get('rr_features_device_auc'), '.3f')} | "
+                     f"{_fmt(e.get('cnn_embedding_device_auc'), '.3f')} |")
+    lines += ["", "_Lower is better for transfer. The contrast (RR features "
+              "device-invariant vs CNN embeddings device-encoding) is the mechanism "
+              "of the wearable domain gap._"]
+    return "\n".join(lines) + "\n"
+
+
 def stats_md(stats: dict[str, Any]) -> str:
     lines = [
         "## Statistical Comparisons (CPSC holdout)",
@@ -216,6 +240,7 @@ def main() -> None:
     parser.add_argument("--apple-watch-json", default=None)
     parser.add_argument("--stats-json", default=None)
     parser.add_argument("--onset-json", default=None)
+    parser.add_argument("--mechanism-json", default=None)
     parser.add_argument("--out-prefix", default=None)
     args = parser.parse_args()
 
@@ -232,6 +257,7 @@ def main() -> None:
     stats = _maybe(args.stats_json)
     latency = _maybe(args.latency_json)
     onset = _maybe(args.onset_json)
+    mechanism = _maybe(args.mechanism_json)
 
     if clinical:
         tables["clinical"] = clinical
@@ -245,6 +271,8 @@ def main() -> None:
         tables["latency_bootstrap"] = latency
     if onset:
         tables["onset_prediction"] = onset
+    if mechanism:
+        tables["representation_shift"] = mechanism
 
     prefix = Path(args.out_prefix) if args.out_prefix else out_dir / "paper_tables"
     write_json(prefix.with_suffix(".json"), tables)
@@ -256,6 +284,8 @@ def main() -> None:
                        tables["ecg_controlled_and_deployment"]))
     if stats:
         md.append(stats_md(stats))
+    if mechanism:
+        md.append(mechanism_md(mechanism))
     if mitbih and mitbih.get("rows"):
         md.append(md_table("Cross-Device: MIT-BIH AFib (zero-shot)", mitbih["rows"]))
     if apple:

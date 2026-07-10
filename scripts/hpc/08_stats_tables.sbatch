@@ -21,4 +21,5 @@ source scripts/hpc/common.sh
   --apple-watch-json "${CARDIOWATCH_RESULTS_DIR}/apple_watch_eval.json" \
   --stats-json "${CARDIOWATCH_RESULTS_DIR}/stat_tests.json" \
   --onset-json "${CARDIOWATCH_RESULTS_DIR}/onset_prediction_nk.json" \
+  --mechanism-json "${CARDIOWATCH_RESULTS_DIR}/representation_shift.json" \
   --out-prefix "${CARDIOWATCH_RESULTS_DIR}/paper_tables"

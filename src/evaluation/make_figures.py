@@ -204,12 +204,54 @@ def fig_latency(latency: dict[str, Any], out_dir: Path) -> bool:
     return True
 
 
+def fig_mechanism(mech: dict[str, Any], out_dir: Path) -> bool:
+    """Device-separability bar chart: RR features vs CNN embedding, per pair."""
+    sep = mech.get("device_separability_auc", {})
+    pairs = [p for p, e in sep.items()
+             if e.get("rr_features_device_auc") is not None]
+    if not pairs:
+        print("SKIP mechanism: no device-separability results")
+        return False
+
+    labels = [p.replace("_vs_", " vs\n") for p in pairs]
+    rr = [sep[p].get("rr_features_device_auc") for p in pairs]
+    cnn = [sep[p].get("cnn_embedding_device_auc") for p in pairs]
+    x = np.arange(len(pairs))
+    w = 0.38
+    fig, ax = plt.subplots(figsize=(max(6, 2.4 * len(pairs)), 4.8))
+    ax.bar(x - w / 2, rr, w, color="#185FA5", label="RR/HRV features (device-agnostic)")
+    if any(c is not None for c in cnn):
+        ax.bar(x + w / 2, [c if c is not None else 0 for c in cnn], w,
+               color="#993C1D", label="CNN-LSTM embedding")
+    ax.axhline(0.5, ls="--", lw=1, color="#B4B2A9", label="chance (device-invariant)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_ylabel("Device-separability AUC")
+    ax.set_ylim(0.4, 1.02)
+    ax.set_title("Does the representation encode the device?\n"
+                 "Higher = device-specific (won't transfer)")
+    ax.legend(fontsize=9, loc="upper left")
+    for xi, (r, c) in enumerate(zip(rr, cnn)):
+        if r is not None:
+            ax.text(xi - w / 2, r + 0.01, f"{r:.2f}", ha="center", va="bottom", fontsize=8)
+        if c is not None:
+            ax.text(xi + w / 2, c + 0.01, f"{c:.2f}", ha="center", va="bottom", fontsize=8)
+    out = out_dir / "device_separability.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out}")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate CardioWatch paper figures")
     parser.add_argument("--paired-json", default=None,
                         help="paired_cpsc_predictions.json")
     parser.add_argument("--latency-json", default=None,
                         help="latency_bootstrap.json")
+    parser.add_argument("--mechanism-json", default=None,
+                        help="representation_shift.json")
     parser.add_argument("--out-dir", default="docs/results/figures",
                         help="directory for output PNGs")
     args = parser.parse_args()
@@ -227,6 +269,10 @@ def main() -> None:
         latency = load_json(args.latency_json)
         if latency:
             made += int(fig_latency(latency, out_dir))
+    if args.mechanism_json:
+        mech = load_json(args.mechanism_json)
+        if mech:
+            made += int(fig_mechanism(mech, out_dir))
 
     print(f"Done — {made} figure(s) written to {out_dir}")
 
