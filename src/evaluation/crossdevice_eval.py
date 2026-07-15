@@ -236,6 +236,25 @@ def _score(cohort: str, args: argparse.Namespace) -> dict[str, Any]:
     probs: dict[str, list[float]] = {m: [] for m in allowed}
     skipped = 0
 
+    cnn_models = [(name, cnn[name]) for name in ("cnn_cpsc", "cnn_combined_deploy")
+                  if cnn.get(name) is not None]
+    CNN_BATCH = 256
+    win_buf: list[np.ndarray] = []
+
+    def _flush_cnn() -> None:
+        # Batched CNN inference: one GPU call per CNN_BATCH windows instead of
+        # one (with a .item() sync) per window. Same windows, same order, same
+        # scores — but minutes instead of hours on long Holter cohorts (ltafdb).
+        if not win_buf or not cnn_models:
+            win_buf.clear()
+            return
+        x = torch.tensor(np.stack(win_buf), dtype=torch.float32).unsqueeze(1).to(device)
+        for name, model in cnn_models:
+            with torch.no_grad():
+                p = torch.sigmoid(model(x).squeeze(-1)).detach().cpu().numpy()
+            probs[name].extend(float(v) for v in np.atleast_1d(p))
+        win_buf.clear()
+
     for rec, label, sig in cohort_windows(cohort):
         window = preprocess_cnn(sig)  # identical window for every model
         rr_feats = extract_rr_features(window, fs=TARGET_FS)
@@ -250,13 +269,10 @@ def _score(cohort: str, args: argparse.Namespace) -> dict[str, Any]:
         record_ids.append(rec)
         labels.append(int(label))
         probs["rr_rf"].append(rr_prob)
-        x = torch.tensor(window, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
-        for name in ("cnn_cpsc", "cnn_combined_deploy"):
-            if cnn.get(name) is not None:
-                with torch.no_grad():
-                    probs[name].append(
-                        float(torch.sigmoid(cnn[name](x).squeeze()).detach().cpu().item())
-                    )
+        win_buf.append(window)
+        if len(win_buf) >= CNN_BATCH:
+            _flush_cnn()
+    _flush_cnn()
 
     return _summarize(cohort, allowed, record_ids, labels, probs, skipped)
 
