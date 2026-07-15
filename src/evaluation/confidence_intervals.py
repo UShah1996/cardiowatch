@@ -149,6 +149,73 @@ def bootstrap_all_metrics(
     return metrics_out
 
 
+# ── Patient-clustered bootstrap (for windowed cross-device eval) ──────
+
+def cluster_bootstrap_auc(
+    y_true:  np.ndarray,
+    y_prob:  np.ndarray,
+    groups:  np.ndarray,
+    n_boot:  int   = 2000,
+    ci:      float = 0.95,
+    seed:    int   = 42,
+) -> Tuple[float, float, float]:
+    """
+    Patient- (record-) clustered bootstrap CI for AUC on windowed data.
+
+    Windows within a patient/record are correlated, so resampling individual
+    windows (the naive bootstrap in `bootstrap_ci`) understates uncertainty.
+    This resamples whole GROUPS (patients/records) with replacement, pools all
+    windows of the drawn groups, and computes AUC per resample. This is the
+    pre-registered CI for every external cross-device AUC.
+
+    Args:
+        y_true : binary labels, one per window
+        y_prob : predicted probabilities, one per window
+        groups : group id per window (e.g. patient/record id)
+        n_boot : number of cluster resamples
+        ci     : confidence level
+        seed   : RNG seed
+
+    Returns:
+        (point_estimate, lower, upper). Point estimate is the pooled AUC on the
+        full data; lower/upper are NaN if fewer than 2 usable resamples.
+    """
+    rng     = np.random.default_rng(seed)
+    y_true  = np.asarray(y_true)
+    y_prob  = np.asarray(y_prob)
+    groups  = np.asarray(groups)
+
+    uniq        = np.unique(groups)
+    # Precompute per-group window index arrays once.
+    idx_by_grp  = {g: np.where(groups == g)[0] for g in uniq}
+
+    boot_scores = []
+    for _ in range(n_boot):
+        drawn = rng.choice(uniq, size=len(uniq), replace=True)
+        idx   = np.concatenate([idx_by_grp[g] for g in drawn])
+        yt, yp = y_true[idx], y_prob[idx]
+        if len(np.unique(yt)) < 2:
+            continue
+        try:
+            boot_scores.append(roc_auc_score(yt, yp))
+        except Exception:
+            continue
+
+    if len(np.unique(y_true)) == 2:
+        point = float(roc_auc_score(y_true, y_prob))
+    else:
+        point = float('nan')
+
+    if len(boot_scores) < 2:
+        return point, float('nan'), float('nan')
+
+    boot_scores = np.array(boot_scores)
+    alpha = 1.0 - ci
+    lower = float(np.percentile(boot_scores, 100 * alpha / 2))
+    upper = float(np.percentile(boot_scores, 100 * (1 - alpha / 2)))
+    return point, lower, upper
+
+
 # ── CV CI (for RF / XGBoost with k-fold results) ─────────────────────
 
 def cv_ci(

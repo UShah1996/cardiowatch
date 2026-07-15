@@ -175,6 +175,77 @@ def mechanism_md(m: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def crossdevice_md(cd: dict[str, Any]) -> str:
+    """Head-to-head zero-shot cross-device degradation table.
+
+    Per external cohort: RR+RF and CNN-LSTM(CPSC) AUC with patient-clustered
+    bootstrap CIs, plus the paired-DeLong p (Holm-corrected across cohorts).
+    This is the empirical centerpiece of the cross-device claim.
+    """
+    lines = [
+        "## Cross-Device Generalization — Zero-Shot Head-to-Head",
+        "",
+        f"Primary pair: `{cd.get('primary_pair', 'rr_rf_vs_cnn_cpsc')}`. Paired DeLong "
+        f"across {cd.get('holm_family_size', '?')} cohorts forms one Holm family "
+        "(separate from the same-data family). AUC CIs are patient/record-clustered "
+        f"bootstrap ({cd.get('n_boot', '?')} resamples).",
+        "",
+        "| Cohort | Device | n windows | n patients | RR+RF AUC (95% CI) | CNN-LSTM(CPSC) AUC (95% CI) | ΔAUC (RR−CNN) | DeLong p(Holm) |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+
+    def auc_ci(entry):
+        if not entry or entry.get("auc") is None:
+            return "—"
+        lo, hi = entry.get("cluster_bootstrap_ci", [None, None])
+        ci = f" [{lo:.3f}–{hi:.3f}]" if isinstance(lo, (int, float)) and lo == lo else ""
+        return f"{entry['auc']:.3f}{ci}"
+
+    for name, c in (cd.get("cohorts") or {}).items():
+        mc = c.get("model_auc_clustered_ci", {})
+        rr = mc.get("rr_rf", {})
+        cnn = mc.get("cnn_cpsc", {})
+        d = c.get("paired_delong_rr_vs_cnn_cpsc") or {}
+        delta = d.get("delta_auc")
+        n_win = rr.get("n_windows") or cnn.get("n_windows") or c.get("n_afib_windows", "?")
+        n_rec = rr.get("n_records") or cnn.get("n_records", "?")
+        lines.append(
+            f"| {name} | {c.get('device', name)} | {n_win} | {n_rec} | "
+            f"{auc_ci(rr)} | {auc_ci(cnn)} | {_fmt(delta, '+.3f')} | "
+            f"{_fmt(d.get('p_value_holm'))} |"
+        )
+    lines += ["", "_Both models are scored zero-shot on identical 10 s windows. The "
+              "combined CNN-LSTM is omitted for CinC-2017 (training overlap). Apple "
+              "Watch has a single confirmed positive — plausibility check, DeLong may "
+              "be skipped._"]
+    return "\n".join(lines) + "\n"
+
+
+def seed_robustness_md(s: dict[str, Any]) -> str:
+    """Secondary sensitivity: distribution of the primary null over seeds."""
+    da = s.get("delta_auc", {})
+    dp = s.get("delong_p", {})
+    lines = [
+        "## Seed Robustness of the Primary Null (secondary sensitivity)",
+        "",
+        f"Primary seed {s.get('primary_seed', 42)} unchanged; this reruns the whole "
+        f"chain over {s.get('n_seeds', '?')} alternate hold-out seeds.",
+        "",
+        "| Metric | Value |",
+        "|---|---:|",
+        f"| Seeds | {s.get('n_seeds', '?')} |",
+        f"| ΔAUC mean (RR−CNN) | {_fmt(da.get('mean'), '+.4f')} |",
+        f"| ΔAUC 95% range | [{_fmt(da.get('p2_5'), '+.4f')}, {_fmt(da.get('p97_5'), '+.4f')}] |",
+        f"| DeLong p median | {_fmt(dp.get('median'))} |",
+        f"| Runs significant (p<{s.get('alpha', 0.05)}) | {dp.get('n_significant', '?')}/{s.get('n_seeds', '?')} |",
+        f"| RR+RF mean AUC | {_fmt(s.get('rr_auc_mean'), '.3f')} |",
+        f"| CNN-LSTM(CPSC) mean AUC | {_fmt(s.get('cnn_cpsc_auc_mean'), '.3f')} |",
+    ]
+    if s.get("verdict"):
+        lines += ["", f"_{s['verdict']}_"]
+    return "\n".join(lines) + "\n"
+
+
 def stats_md(stats: dict[str, Any]) -> str:
     lines = [
         "## Statistical Comparisons (CPSC holdout)",
@@ -241,6 +312,8 @@ def main() -> None:
     parser.add_argument("--stats-json", default=None)
     parser.add_argument("--onset-json", default=None)
     parser.add_argument("--mechanism-json", default=None)
+    parser.add_argument("--crossdevice-json", default=None)
+    parser.add_argument("--seed-robustness-json", default=None)
     parser.add_argument("--out-prefix", default=None)
     args = parser.parse_args()
 
@@ -258,6 +331,8 @@ def main() -> None:
     latency = _maybe(args.latency_json)
     onset = _maybe(args.onset_json)
     mechanism = _maybe(args.mechanism_json)
+    crossdevice = _maybe(args.crossdevice_json)
+    seed_robustness = _maybe(args.seed_robustness_json)
 
     if clinical:
         tables["clinical"] = clinical
@@ -273,6 +348,10 @@ def main() -> None:
         tables["onset_prediction"] = onset
     if mechanism:
         tables["representation_shift"] = mechanism
+    if crossdevice:
+        tables["crossdevice_generalization"] = crossdevice
+    if seed_robustness:
+        tables["seed_robustness"] = seed_robustness
 
     prefix = Path(args.out_prefix) if args.out_prefix else out_dir / "paper_tables"
     write_json(prefix.with_suffix(".json"), tables)
@@ -284,6 +363,10 @@ def main() -> None:
                        tables["ecg_controlled_and_deployment"]))
     if stats:
         md.append(stats_md(stats))
+    if crossdevice:
+        md.append(crossdevice_md(crossdevice))
+    if seed_robustness:
+        md.append(seed_robustness_md(seed_robustness))
     if mechanism:
         md.append(mechanism_md(mechanism))
     if mitbih and mitbih.get("rows"):

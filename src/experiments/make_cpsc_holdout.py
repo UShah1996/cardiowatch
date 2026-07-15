@@ -145,6 +145,12 @@ def make_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "seed": args.seed,
         "holdout_fraction": args.holdout_fraction,
         "split_unit": split_unit,
+        "split_unit_note": (
+            "split_unit='record' is patient-grouped here: CPSC 2018 has one ECG per "
+            "patient after collapsing segment suffixes (n_records == n_units), so a "
+            "record-level split does not leak a patient across train/holdout. "
+            "split_unit switches to 'patient' automatically if multi-record patients exist."
+        ),
         "patient_id_rule": "record basename, with trailing segment/window suffix collapsed",
         "n_records": len(records),
         "n_units": len(units),

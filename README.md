@@ -44,7 +44,9 @@ one confirmed AFib, device-classifier labels).
 > **Scope:** CardioWatch detects **atrial fibrillation → stroke prevention**, not
 > heart attacks. Clinical+ECG **fusion is exploratory** (cross-population). The old
 > "30-minute lead time" claim is retired; detection is near-instant once AFib is
-> present, and an exploratory **onset-prediction** analysis is modest (AUC ≈ 0.66).
+> present, and an exploratory **onset-prediction** analysis is modest (pre-registered
+> primary variant = neurokit features, window AUC **0.663**; the RR-only variant AUC
+> 0.606 and the P-wave variant are reported as labeled sensitivity analyses).
 
 ---
 
@@ -75,8 +77,8 @@ cardiowatch/
 │   │   ├── scaler.pkl
 │   │   ├── rf_model.pkl
 │   │   ├── xgb_model.pkl
-│   │   ├── cnn_lstm_best.pt                   # CPSC-only, AUC=0.968
-│   │   ├── cnn_lstm_combined_best.pt          # Combined, AUC=0.974
+│   │   ├── cnn_lstm_best.pt                   # CPSC-only (pre-holdout val AUC≈0.968; pre-registered holdout AUC=0.949)
+│   │   ├── cnn_lstm_combined_best.pt          # Combined  (pre-holdout val AUC≈0.974; pre-registered holdout AUC=0.975)
 │   │   ├── cnn_lstm_cv_best.pt                # Best of 3-fold CV (most validated)
 │   │   ├── cnn_lstm_cv_results.json           # Per-fold metrics + aggregate CI
 │   │   ├── fusion_model.pkl                   # Calibrated fusion (learned weights)

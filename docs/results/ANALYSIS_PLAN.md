@@ -79,6 +79,54 @@ Report all applicable metrics with dataset, threshold, and sample count:
 - Wilson CIs for proportions.
 - Bootstrap CIs for F1 and other non-smooth metrics.
 
+## Amendment 2026-07 — Cross-Device Generalization (Pre-Registered Before Run)
+
+This amendment is committed **before** the corresponding HPC run. It adds a pre-registered
+cross-device comparison and two labeled secondary analyses. It does **not** alter the
+primary same-data endpoint (RR+RF vs CNN-LSTM on the CPSC holdout) defined above.
+
+### New primary framing endpoint — cross-device degradation
+
+For each external cohort, both the device-agnostic RR+RF model and the CPSC-only CNN-LSTM
+are scored **zero-shot** (no retraining, no fine-tuning) on the **identical 10-second
+Lead-I windows** (5000 samples at 500 Hz; long Holter records are cut into consecutive
+non-overlapping 10 s windows). External cohorts, fixed in advance:
+
+- MIT-BIH AFib (`afdb`) — ambulatory Holter, 250 Hz (resampled to 500 Hz).
+- Long-Term AF (`ltafdb`) — ambulatory Holter, 128 Hz (resampled to 500 Hz).
+- PhysioNet/CinC 2017 held-out split — single-lead AliveCor, 300 Hz (resampled to 500 Hz).
+- Apple Watch personal exports — consumer wearable, 512 Hz (resampled to 500 Hz).
+
+The combined (data-asymmetric) CNN-LSTM is also scored on the same windows and reported as
+a secondary deployment row, never as a same-data superiority claim.
+
+- **Discrimination test (pre-registered):** per cohort with both classes present, paired
+  **DeLong** on RR+RF vs CNN-LSTM(CPSC) AUC on the identical windows. These `k` cross-device
+  DeLong tests form a **single pre-registered Holm family**, separate from the same-data
+  family above. `crossdevice_stats.json` is the canonical source for these corrected p-values.
+- **Uncertainty (pre-registered):** every external AUC is reported with a
+  **patient-clustered (record-clustered) bootstrap 95% CI** (resample whole patients/records
+  with replacement, `n_boot = 2000`, seed 42), because windows within a patient are
+  correlated; naive per-window CIs would understate uncertainty.
+- Apple Watch remains a **plausibility check** (single confirmed positive; device-classifier
+  labels), reported with a Wilson interval on accuracy, never as a sensitivity claim.
+
+### Secondary analysis A — seed robustness of the primary null (labeled sensitivity)
+
+The pre-registered primary null (RR+RF vs CNN-LSTM CPSC) uses seed 42 exactly as fixed
+above. **In addition**, we report the distribution of ΔAUC and paired-DeLong p over
+`N = 20` alternate hold-out seeds (`seeds 1000..1019`), each rerunning
+holdout → train(RR, CNN-CPSC) → paired eval. This is an explicitly **secondary robustness
+analysis, not the pre-registered primary**, and does not change the reported headline
+result. Aggregated to `seed_robustness.json`.
+
+### Secondary analysis B — onset-prediction canonical variant
+
+The exploratory onset-prediction primary result is the **neurokit-feature variant**
+(`onset_prediction_nk.json`), consistent with `result_tables.py`. The base RR-only variant
+(`onset_prediction.json`) and the P-wave variant (job 12) are reported as **labeled
+sensitivity analyses**. All three are released; none is a clinical early-warning claim.
+
 ## Validity Caveats
 
 - Apple Watch labels are agreement with Apple’s classifier unless independently adjudicated; state how the AFib example was confirmed.

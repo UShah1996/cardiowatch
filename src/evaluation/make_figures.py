@@ -244,6 +244,78 @@ def fig_mechanism(mech: dict[str, Any], out_dir: Path) -> bool:
     return True
 
 
+def fig_crossdevice(cd: dict[str, Any], out_dir: Path) -> bool:
+    """Head-to-head zero-shot cross-device degradation.
+
+    Per external cohort: RR+RF vs CNN-LSTM(CPSC) AUC with patient/record-clustered
+    bootstrap 95% CI error bars, chance line, and the Holm-corrected paired-DeLong
+    p annotated above each cohort. This is the empirical centerpiece figure.
+    Cohorts without both models scored (e.g. Apple Watch plausibility-only) are
+    skipped so the figure only shows valid head-to-head comparisons.
+    """
+    cohorts = cd.get("cohorts", {})
+
+    def _ci_err(entry, auc):
+        lo, hi = (entry.get("cluster_bootstrap_ci") or [None, None])
+        if auc is None or lo is None or hi is None or lo != lo or hi != hi:
+            return 0.0, 0.0
+        return max(0.0, auc - lo), max(0.0, hi - auc)
+
+    def _valid(v):
+        return v is not None and v == v  # rejects None and NaN (single-class cohorts)
+
+    names, rr_auc, cnn_auc, rr_err, cnn_err, pvals = [], [], [], [], [], []
+    for name, c in cohorts.items():
+        mc = c.get("model_auc_clustered_ci", {})
+        rr = mc.get("rr_rf", {})
+        cnn = mc.get("cnn_cpsc", {})
+        if not (_valid(rr.get("auc")) and _valid(cnn.get("auc"))):
+            continue  # e.g. single-class / plausibility-only cohort (Apple Watch)
+        names.append(name)
+        rr_auc.append(rr["auc"]); cnn_auc.append(cnn["auc"])
+        rlo, rhi = _ci_err(rr, rr["auc"]); rr_err.append([rlo, rhi])
+        clo, chi = _ci_err(cnn, cnn["auc"]); cnn_err.append([clo, chi])
+        d = c.get("paired_delong_rr_vs_cnn_cpsc") or {}
+        pvals.append(d.get("p_value_holm", d.get("p_value")))
+
+    if not names:
+        print("SKIP crossdevice: no cohort has both RR+RF and CNN-LSTM(CPSC) scored")
+        return False
+
+    x = np.arange(len(names))
+    w = 0.38
+    fig, ax = plt.subplots(figsize=(max(6, 2.6 * len(names)), 5))
+    ax.bar(x - w / 2, rr_auc, w, color=MODEL_COLORS["rr_rf"],
+           yerr=np.array(rr_err).T, capsize=4, ecolor="#444441",
+           label="RR + RF (device-agnostic)")
+    ax.bar(x + w / 2, cnn_auc, w, color=MODEL_COLORS["cnn_cpsc"],
+           yerr=np.array(cnn_err).T, capsize=4, ecolor="#444441",
+           label="CNN-LSTM (CPSC), zero-shot")
+    ax.axhline(0.5, ls="--", lw=1, color="#B4B2A9", label="chance (0.5)")
+
+    for xi, (r, c, p) in enumerate(zip(rr_auc, cnn_auc, pvals)):
+        ax.text(xi - w / 2, r + 0.015, f"{r:.3f}", ha="center", va="bottom", fontsize=8)
+        ax.text(xi + w / 2, c + 0.015, f"{c:.3f}", ha="center", va="bottom", fontsize=8)
+        if p is not None:
+            top = max(r, c)
+            ax.text(xi, min(top + 0.08, 1.04), f"DeLong p(Holm)\n{p:.2g}",
+                    ha="center", va="bottom", fontsize=7.5, color="#444441")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{n}\n{cohorts[n].get('device', '')}" for n in names], fontsize=8)
+    ax.set_ylabel("AUC-ROC (zero-shot)")
+    ax.set_ylim(0, 1.18)
+    ax.set_title("Cross-device generalization: timing features transfer,\n"
+                 "deep waveform model degrades off its training device")
+    ax.legend(loc="lower left", fontsize=9)
+    out = out_dir / "crossdevice_degradation.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out}")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate CardioWatch paper figures")
     parser.add_argument("--paired-json", default=None,
@@ -252,6 +324,8 @@ def main() -> None:
                         help="latency_bootstrap.json")
     parser.add_argument("--mechanism-json", default=None,
                         help="representation_shift.json")
+    parser.add_argument("--crossdevice-json", default=None,
+                        help="crossdevice_stats.json")
     parser.add_argument("--out-dir", default="docs/results/figures",
                         help="directory for output PNGs")
     args = parser.parse_args()
@@ -273,6 +347,10 @@ def main() -> None:
         mech = load_json(args.mechanism_json)
         if mech:
             made += int(fig_mechanism(mech, out_dir))
+    if args.crossdevice_json:
+        cd = load_json(args.crossdevice_json)
+        if cd:
+            made += int(fig_crossdevice(cd, out_dir))
 
     print(f"Done — {made} figure(s) written to {out_dir}")
 
