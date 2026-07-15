@@ -30,7 +30,6 @@ fi
   --apple-watch-json "${R}/apple_watch_eval.json" \
   --stats-json "${R}/stat_tests.json" \
   --onset-json "${R}/onset_prediction_nk.json" \
-  --mechanism-json "${R}/representation_shift.json" \
   --crossdevice-json "${R}/crossdevice_stats.json" \
   --seed-robustness-json "${R}/seed_robustness.json" \
   --out-prefix "${R}/paper_tables"

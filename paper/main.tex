@@ -275,14 +275,6 @@ Random baseline & 0.502 & 0.508 & 0.511 & 0.269 & 0.50 \\
 \end{tabular}
 \end{table}
 
-\subsection{Why device-agnostic features transfer (mechanism)}
-A device-separability analysis (can a classifier identify the recording device
-from each representation?) explains the gap: the CNN-LSTM embedding is strongly
-device-separable, whereas the RR/HRV feature vector is close to device-invariant.
-The learned waveform representation encodes the hardware; the timing
-representation does not. Full per-device-pair numbers are in
-\texttt{representation\_shift.json}.
-
 \subsection{Exploratory onset prediction}
 Predicting AFib before it begins is a harder, separate problem. Pooled across two
 Holter cohorts (104 patients, patient-grouped cross-validation), personalized

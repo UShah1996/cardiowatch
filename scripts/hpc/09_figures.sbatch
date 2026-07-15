@@ -12,6 +12,5 @@ source scripts/hpc/common.sh
 "${CARDIOWATCH_PYTHON}" -m src.evaluation.make_figures \
   --paired-json "${CARDIOWATCH_RESULTS_DIR}/paired_cpsc_predictions.json" \
   --latency-json "${CARDIOWATCH_RESULTS_DIR}/latency_bootstrap.json" \
-  --mechanism-json "${CARDIOWATCH_RESULTS_DIR}/representation_shift.json" \
   --crossdevice-json "${CARDIOWATCH_RESULTS_DIR}/crossdevice_stats.json" \
   --out-dir "${CARDIOWATCH_RESULTS_DIR}/figures"

@@ -20,7 +20,7 @@ j02=$(sb --dependency=afterok:${j01} scripts/hpc/02_train_clinical.sbatch)
 j03=$(sb --dependency=afterok:${j01} scripts/hpc/03_train_rr_complement.sbatch)
 j04=$(sb --dependency=afterok:${j01} scripts/hpc/04_train_cnn_cpsc_complement.sbatch)
 j05=$(sb --dependency=afterok:${j01} scripts/hpc/05_train_cnn_combined_deploy.sbatch)
-# Exploratory onset (nk = pre-registered primary) + mechanism, previously orphaned.
+# Exploratory onset (nk = pre-registered primary), previously orphaned.
 j10=$(sb --dependency=afterok:${j01} scripts/hpc/10_onset_prediction.sbatch)
 j11=$(sb --dependency=afterok:${j01} scripts/hpc/11_onset_neurokit.sbatch)
 j12=$(sb --dependency=afterok:${j01} scripts/hpc/12_onset_neurokit_pwave.sbatch)
@@ -30,7 +30,8 @@ j16=$(sb --dependency=afterok:${j01} scripts/hpc/16_seed_robustness.sbatch)
 # ── Tier B: evaluations, fanned out off their training deps ─────────────────
 j06=$(sb --dependency=afterok:${j03}:${j04}:${j05} scripts/hpc/06_cross_device_eval.sbatch)
 j07=$(sb --dependency=afterok:${j04} scripts/hpc/07_latency_bootstrap.sbatch)
-j13=$(sb --dependency=afterok:${j04} scripts/hpc/13_mechanism.sbatch)
+# Job 13 (mechanism / device-separability) removed: the result was confounded by
+# population differences between cohorts and is not reported in the paper.
 # E1/E2 head-to-head cross-device eval — array over 4 cohorts (parallel).
 j14=$(sb --dependency=afterok:${j03}:${j04}:${j05} scripts/hpc/14_crossdevice_eval.sbatch)
 
@@ -38,7 +39,7 @@ j14=$(sb --dependency=afterok:${j03}:${j04}:${j05} scripts/hpc/14_crossdevice_ev
 j15=$(sb --dependency=afterok:${j14} scripts/hpc/15_crossdevice_stats.sbatch)
 
 # ── Tier D: canonical stats + tables (folds in cross-device, onset, seeds) ──
-j08=$(sb --dependency=afterok:${j06}:${j07}:${j10}:${j11}:${j12}:${j13}:${j15}:${j16} \
+j08=$(sb --dependency=afterok:${j06}:${j07}:${j10}:${j11}:${j12}:${j15}:${j16} \
         scripts/hpc/08_stats_tables.sbatch)
 j09=$(sb --dependency=afterok:${j08} scripts/hpc/09_figures.sbatch)
 
@@ -55,7 +56,6 @@ Submitted (RUN_ID=${RUN_ID}):
   10 onset base      ${j10}
   11 onset nk*       ${j11}   (* pre-registered primary onset variant)
   12 onset pwave     ${j12}
-  13 mechanism       ${j13}
   14 crossdev eval   ${j14}   (array 0-3: afdb,ltafdb,cinc2017,apple_watch)
   15 crossdev stats  ${j15}
   16 seed robustness ${j16}   (array 0-19: secondary sensitivity)
