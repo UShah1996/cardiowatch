@@ -195,6 +195,40 @@ def cohort_windows(cohort: str) -> Iterator[Window]:
     raise ValueError(f"Unknown cohort: {cohort}")
 
 
+def subsample_per_record(
+    windows: Iterator[Window], max_per_record: int, seed: int = 42
+) -> Iterator[Window]:
+    """Cap the number of scored windows per record, sampled uniformly.
+
+    Very long ambulatory records (e.g. LTAFDB: 84 records x ~24 h ~= 725k
+    windows) cannot be scored exhaustively within a normal compute budget. We
+    therefore evaluate a bounded, uniformly-spaced subsample of each record.
+
+    Windows are drawn uniformly at random *without replacement* within each
+    record (seeded, so runs are reproducible), and re-emitted in temporal order.
+    Random selection rather than fixed-stride selection is deliberate: a fixed
+    stride can alias with periodic structure in a record and badly skew the
+    sampled class balance (a stride that matches an alternating rhythm pattern
+    can select almost exclusively one label). Random sampling is unbiased for the
+    record's label distribution in expectation and has no aliasing failure mode.
+
+    Record identity is retained, so patient-clustered CIs remain valid; the only
+    effect is a wider CI from the smaller n. Records with <= max_per_record
+    windows pass through untouched.
+    """
+    from itertools import groupby
+
+    for rec, group in groupby(windows, key=lambda w: w[0]):
+        items = list(group)
+        if len(items) <= max_per_record:
+            yield from items
+            continue
+        rng = np.random.default_rng(abs(hash((rec, seed))) % (2 ** 32))
+        idx = np.sort(rng.choice(len(items), size=max_per_record, replace=False))
+        for i in idx:
+            yield items[int(i)]
+
+
 COHORT_DEVICE = {
     "afdb": "MIT-BIH AFib — ambulatory Holter, 250 Hz",
     "ltafdb": "Long-Term AF — ambulatory Holter, 128 Hz",
@@ -255,7 +289,15 @@ def _score(cohort: str, args: argparse.Namespace) -> dict[str, Any]:
             probs[name].extend(float(v) for v in np.atleast_1d(p))
         win_buf.clear()
 
-    for rec, label, sig in cohort_windows(cohort):
+    stream = cohort_windows(cohort)
+    max_per_rec = getattr(args, "max_windows_per_record", 0) or 0
+    if max_per_rec > 0:
+        stream = subsample_per_record(stream, max_per_rec,
+                                      seed=getattr(args, "seed", 42))
+        print(f"[{cohort}] per-record cap: {max_per_rec} windows "
+              f"(uniform stride subsample)")
+
+    for rec, label, sig in stream:
         window = preprocess_cnn(sig)  # identical window for every model
         rr_feats = extract_rr_features(window, fs=TARGET_FS)
         if rr_feats is None:
@@ -274,7 +316,8 @@ def _score(cohort: str, args: argparse.Namespace) -> dict[str, Any]:
             _flush_cnn()
     _flush_cnn()
 
-    return _summarize(cohort, allowed, record_ids, labels, probs, skipped)
+    return _summarize(cohort, allowed, record_ids, labels, probs, skipped,
+                      max_per_record=max_per_rec)
 
 
 def _summarize(
@@ -284,6 +327,7 @@ def _summarize(
     labels: list[int],
     probs: dict[str, list[float]],
     skipped: int,
+    max_per_record: int = 0,
 ) -> dict[str, Any]:
     from sklearn.metrics import roc_auc_score
 
@@ -316,6 +360,8 @@ def _summarize(
         "probabilities": probs,
         "per_model_auc": per_model,
         "window_seconds": WINDOW_SEC,
+        "max_windows_per_record": max_per_record,
+        "subsampled": bool(max_per_record),
         "note": (
             "Per-window probabilities are aligned across models (identical "
             "windows) so a paired DeLong test is valid. record_ids are the "
@@ -370,6 +416,12 @@ def main() -> None:
     parser.add_argument("--rr-model", default="data/processed/rr_rf_cpsc_complement.pkl")
     parser.add_argument("--cnn-cpsc-checkpoint", default="data/processed/cnn_lstm_cpsc_complement.pt")
     parser.add_argument("--cnn-combined-checkpoint", default="data/processed/cnn_lstm_combined_deploy.pt")
+    parser.add_argument("--max-windows-per-record", type=int, default=0,
+                        help="cap scored windows per record (0 = exhaustive). "
+                             "Uniform stride subsample; use for very long "
+                             "ambulatory records such as ltafdb.")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="seed for the per-record subsample phase")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
