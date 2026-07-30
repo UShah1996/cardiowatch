@@ -5,25 +5,35 @@
 
 Dear Program Committee,
 
-Please consider our manuscript, *"Device-Agnostic Screening for Atrial
-Fibrillation on Consumer Wearables: A Pre-Registered, Leakage-Safe Cross-Device
-Evaluation for Stroke Prevention,"* for the PSB 2027 session **AI and Machine
-Learning in Clinical Medicine**.
+Please consider our manuscript, *"In-Domain Accuracy Does Not Predict Cross-Device
+Robustness: A Pre-Registered Benchmark for Wearable Atrial Fibrillation
+Screening,"* for the PSB 2027 session **AI and Machine Learning in Clinical
+Medicine**.
 
 Atrial fibrillation is a leading, largely preventable cause of ischemic stroke,
-and a large fraction of cases are silent until a stroke occurs. Consumer
-smartwatches that record a single-lead ECG make opportunistic population-scale
-screening possible, but only if a screening model works, unchanged, across the
-heterogeneous fleet of devices people already own. Our paper treats this
-cross-device gap as the central obstacle and evaluates it rigorously: on a
-pre-registered, leakage-safe, patient-grouped hold-out we show that a lightweight
-device-agnostic timing model is statistically indistinguishable from a deep
-waveform model on matched data (and stable across 20 seeds), and that under the
-realistic zero-shot constraint the timing model transfers across unseen hardware
-(hospital, ambulatory Holter, single-lead AliveCor, and Apple Watch) while the
-deep model degrades. We frame the contribution as a reusable screening-evaluation
-methodology, responsive to the documented leakage/reproducibility problems in
-clinical machine learning, rather than as a new detector.
+and a large fraction of cases are silent until a stroke occurs. Consumer wearables
+that record a single-lead ECG make opportunistic population-scale screening
+possible, but only if a screening model works, unchanged, across the heterogeneous
+fleet of devices people already own. Our paper asks a question about *evaluation*
+rather than architecture: does in-domain held-out accuracy — the metric on which
+such models are routinely selected — predict which model survives deployment?
+
+We find that it does not, and that it can order candidate models incorrectly. On a
+pre-registered, leakage-safe, patient-grouped hold-out, a deep waveform model is
+nominally ahead of a lightweight device-agnostic timing model (AUC 0.949 vs 0.935,
+not significant). Moved zero-shot onto ambulatory Holter recordings, that ranking
+inverts: the timing model reaches 0.871 (95% CI 0.81–0.92) while the same deep
+model falls to 0.773 (0.67–0.87). On single-lead AliveCor recordings the two are
+indistinguishable (p=0.93), so the effect appears where device shift is largest. A
+deep model trained *across* devices recovers and leads, showing the failure is one
+of training distribution rather than architecture.
+
+Our contribution is therefore a cautionary benchmark result together with the
+reusable protocol that exposes it — identical windows, zero-shot external cohorts,
+paired tests, and patient-clustered intervals — responsive to documented leakage
+and reproducibility problems in clinical machine learning. We report our
+limitations plainly, including a pre-registered cohort we could not score within
+budget and a pre-registered sensitivity analysis that did not complete.
 
 We believe this fits the Clinical Medicine session's emphasis on clinically
 grounded, methodologically rigorous machine learning, and speaks directly to
