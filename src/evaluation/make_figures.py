@@ -316,6 +316,112 @@ def fig_crossdevice(cd: dict[str, Any], out_dir: Path) -> bool:
     return True
 
 
+def fig_inversion(paired: dict[str, Any], cd: dict[str, Any], out_dir: Path) -> bool:
+    """Rank-inversion slope plot — the paper's headline visual.
+
+    One line per model across cohorts ordered by increasing device shift
+    (in-domain hold-out -> AliveCor -> Holter). The lines cross: the deep model
+    leads in-domain but falls below the device-agnostic model off-device, so
+    in-domain accuracy ranks the two candidates in an order that deployment
+    reverses. External points carry patient/record-clustered bootstrap 95% CIs.
+
+    Apple Watch is deliberately excluded: with a single confirmed positive its
+    AUC is a plausibility check, not a discrimination estimate.
+    """
+    from sklearn.metrics import roc_auc_score
+
+    labels = np.array(paired.get("labels", []), dtype=int)
+    probs = paired.get("probabilities", {})
+    if labels.size == 0 or "rr_rf" not in probs or "cnn_cpsc" not in probs:
+        print("SKIP inversion: in-domain rr_rf / cnn_cpsc scores unavailable")
+        return False
+
+    def _valid(v):
+        return v is not None and v == v
+
+    # In-domain anchor, then external cohorts by increasing device shift.
+    xs = ["CPSC hold-out\n(in-domain)"]
+    rr = [(float(roc_auc_score(labels, probs["rr_rf"])), None, None)]
+    cnn = [(float(roc_auc_score(labels, probs["cnn_cpsc"])), None, None)]
+
+    cohorts = cd.get("cohorts", {})
+    for key, pretty in (("cinc2017", "CinC 2017\n(AliveCor)"),
+                        ("ltafdb", "Long-Term AF\n(Holter)"),
+                        ("afdb", "MIT-BIH\n(Holter)")):
+        c = cohorts.get(key)
+        if not c:
+            continue
+        mc = c.get("model_auc_clustered_ci", {})
+        a, b = mc.get("rr_rf", {}), mc.get("cnn_cpsc", {})
+        if not (_valid(a.get("auc")) and _valid(b.get("auc"))):
+            continue
+        xs.append(pretty)
+        for entry, bucket in ((a, rr), (b, cnn)):
+            lo, hi = (entry.get("cluster_bootstrap_ci") or [None, None])
+            bucket.append((entry["auc"],
+                           lo if _valid(lo) else None,
+                           hi if _valid(hi) else None))
+
+    if len(xs) < 2:
+        print("SKIP inversion: need at least one external cohort with both models")
+        return False
+
+    x = np.arange(len(xs))
+
+    def _series(vals):
+        y = np.array([v[0] for v in vals], dtype=float)
+        lo = np.array([v[0] - v[1] if v[1] is not None else 0.0 for v in vals])
+        hi = np.array([v[2] - v[0] if v[2] is not None else 0.0 for v in vals])
+        return y, np.vstack([np.maximum(lo, 0), np.maximum(hi, 0)])
+
+    rr_y, rr_e = _series(rr)
+    cnn_y, cnn_e = _series(cnn)
+
+    fig, ax = plt.subplots(figsize=(max(7, 2.6 * len(xs)), 5.2))
+    ax.errorbar(x, rr_y, yerr=rr_e, marker="o", ms=9, lw=2.5, capsize=5,
+                color=MODEL_COLORS["rr_rf"], ecolor=MODEL_COLORS["rr_rf"],
+                label="RR + RF (device-agnostic)")
+    ax.errorbar(x, cnn_y, yerr=cnn_e, marker="s", ms=9, lw=2.5, capsize=5,
+                color=MODEL_COLORS["cnn_cpsc"], ecolor=MODEL_COLORS["cnn_cpsc"],
+                label="CNN-LSTM (CPSC-trained), zero-shot")
+
+    # Label each point on the side away from the other line, so the annotations
+    # never read as swapped where the two series are close or crossing.
+    for xi, (a, b) in enumerate(zip(rr_y, cnn_y)):
+        a_up = a >= b
+        ax.annotate(f"{a:.3f}", (xi, a), textcoords="offset points",
+                    xytext=(0, 12 if a_up else -18), ha="center", fontsize=8.5,
+                    color=MODEL_COLORS["rr_rf"])
+        ax.annotate(f"{b:.3f}", (xi, b), textcoords="offset points",
+                    xytext=(0, -18 if a_up else 12), ha="center", fontsize=8.5,
+                    color=MODEL_COLORS["cnn_cpsc"])
+
+    # Shade where the ranking flips (deep above -> deep below).
+    lead = np.sign(cnn_y - rr_y)
+    for xi in range(len(x) - 1):
+        if lead[xi] > 0 and lead[xi + 1] < 0:
+            ax.axvspan(xi, xi + 1, color="#FAEEDA", alpha=0.55, zorder=0)
+            ax.text(xi + 0.5, 0.505, "ranking inverts", ha="center", va="bottom",
+                    fontsize=9.5, color="#854F0B", style="italic")
+
+    ax.axhline(0.5, ls="--", lw=1, color="#B4B2A9", label="chance (0.5)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(xs, fontsize=9)
+    ax.set_xlim(-0.35, len(x) - 0.65)
+    ax.set_ylim(0.45, 1.02)
+    ax.set_ylabel("AUC-ROC")
+    ax.set_title("In-domain accuracy does not predict cross-device robustness\n"
+                 "(cohorts ordered by increasing device shift; "
+                 "external points show clustered 95% CIs)", fontsize=11)
+    ax.legend(loc="lower left", fontsize=9)
+    out = out_dir / "rank_inversion.png"
+    fig.tight_layout()
+    fig.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out}")
+    return True
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate CardioWatch paper figures")
     parser.add_argument("--paired-json", default=None,
@@ -351,6 +457,11 @@ def main() -> None:
         cd = load_json(args.crossdevice_json)
         if cd:
             made += int(fig_crossdevice(cd, out_dir))
+            # Headline figure needs both in-domain and external results.
+            if args.paired_json:
+                paired = load_json(args.paired_json)
+                if paired:
+                    made += int(fig_inversion(paired, cd, out_dir))
 
     print(f"Done — {made} figure(s) written to {out_dir}")
 

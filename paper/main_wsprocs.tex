@@ -209,8 +209,21 @@ pooled over \texttt{afdb} and \texttt{ltafdb}.
 \section{Results}
 
 \subsection{The in-domain ranking inverts off-device (main result)}
-Table~\ref{tab:crossdevice} reports the zero-shot head-to-head on identical
-windows. On matched hospital data the deep model is marginally ahead
+Figure~\ref{fig:inversion} and Table~\ref{tab:crossdevice} report the zero-shot
+head-to-head on identical windows.
+
+\begin{figure}[t]
+\centering
+% docs/results/<run_id>/figures/rank_inversion.png (make_figures.py)
+\includegraphics[width=0.82\linewidth]{figures/rank_inversion.png}
+\caption{The in-domain ranking does not survive device shift. Cohorts are ordered
+by increasing shift from the training distribution. On the matched hospital
+hold-out the deep model is nominally ahead; on single-lead AliveCor the two are
+indistinguishable; on ambulatory Holter the ordering has reversed. Error bars are
+patient/record-clustered bootstrap 95\% CIs. Apple~Watch is omitted (single
+confirmed positive; plausibility only).}
+\label{fig:inversion}
+\end{figure} On matched hospital data the deep model is marginally ahead
 ($0.949$ vs.\ $0.935$, not significant). Moved onto ambulatory Holter recordings
 the ordering reverses: the device-agnostic timing model reaches AUC $0.871$
 (clustered 95\% CI $0.81$--$0.92$) while the same deep model falls to $0.773$
