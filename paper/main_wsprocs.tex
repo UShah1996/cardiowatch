@@ -213,7 +213,7 @@ pooled over \texttt{afdb} and \texttt{ltafdb}.
 \section{Results}
 
 \subsection{Off-device behaviour is variable and unpredictable (main result)}
-Figure~\ref{fig:inversion} and Table~\ref{tab:crossdevice} report the zero-shot
+Figure~\ref{fig:variability} and Table~\ref{tab:crossdevice} report the zero-shot
 head-to-head on identical windows across four external cohorts.
 
 Two facts stand out. First, the \emph{spread} differs sharply: the deep model's
@@ -243,7 +243,7 @@ that the two ambulatory Holter cohorts (MIT-BIH, Long-Term AF) disagree, so the
 variability is not attributable to device class alone. Error bars are
 patient/record-clustered bootstrap 95\% CIs; Apple~Watch has a single confirmed
 positive and is shown for completeness only.}
-\label{fig:inversion}
+\label{fig:variability}
 \end{figure} On matched hospital data the deep model is marginally ahead
 ($0.949$ vs.\ $0.935$, not significant). Moved onto ambulatory Holter recordings
 the ordering reverses: the device-agnostic timing model reaches AUC $0.871$
