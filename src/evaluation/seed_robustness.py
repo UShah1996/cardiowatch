@@ -106,13 +106,39 @@ def reduce_seed_results(seed_dir: str | Path, alpha: float = 0.05) -> dict[str, 
         "rr_auc_mean": float(np.mean([r["rr_auc"] for r in results])),
         "cnn_cpsc_auc_mean": float(np.mean([r["cnn_cpsc_auc"] for r in results])),
         "per_seed": sorted(results, key=lambda r: r["seed"]),
-        "verdict": (
-            f"Across {len(results)} seeds the RR+RF vs CNN-LSTM(CPSC) difference is "
-            f"significant (p<{alpha}) in {n_sig}/{len(results)} runs; the primary null "
-            f"at seed {PRIMARY_SEED} is representative."
-        ),
+        # Derive the verdict from the data rather than asserting a fixed
+        # conclusion: a hard-coded "the primary null is representative" was
+        # wrong whenever most seeds actually reached significance.
+        "verdict": _verdict(n_sig, len(results), deltas, alpha),
         "note": "Labeled secondary sensitivity analysis; does not replace the seed-42 primary.",
     }
+
+
+def _verdict(n_sig: int, n: int, deltas: np.ndarray, alpha: float) -> str:
+    """Describe what the seed sweep actually shows.
+
+    delta = rr_auc - cnn_auc, so a negative mean favours the deep model. The
+    wording is chosen so that a majority-significant sweep is never reported as
+    supporting a null.
+    """
+    frac = n_sig / n if n else 0.0
+    mean = float(np.mean(deltas)) if len(deltas) else 0.0
+    lead = "RR+RF" if mean > 0 else "CNN-LSTM(CPSC)"
+    head = (f"Across {n} seeds the RR+RF vs CNN-LSTM(CPSC) difference is "
+            f"significant (p<{alpha}) in {n_sig}/{n} runs "
+            f"(mean deltaAUC {mean:+.4f}, favouring {lead}).")
+    if frac >= 0.5:
+        return (f"{head} A majority of splits show a significant difference, so a "
+                f"non-significant result on any single split (including the "
+                f"seed-{PRIMARY_SEED} primary) should NOT be read as evidence of "
+                f"equivalence; the single-split test is underpowered relative to "
+                f"the effect.")
+    if frac <= 0.25:
+        return (f"{head} Most splits show no significant difference, so the "
+                f"seed-{PRIMARY_SEED} primary is representative of the sweep.")
+    return (f"{head} Results are split-dependent: neither significance nor "
+            f"equivalence is stable across hold-outs, so single-split "
+            f"conclusions are fragile.")
 
 
 def _self_test() -> None:

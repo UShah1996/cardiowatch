@@ -317,37 +317,40 @@ def fig_crossdevice(cd: dict[str, Any], out_dir: Path) -> bool:
 
 
 def fig_inversion(paired: dict[str, Any], cd: dict[str, Any], out_dir: Path) -> bool:
-    """Rank-inversion slope plot — the paper's headline visual.
+    """Cross-device variability — the paper's headline visual.
 
-    One line per model across cohorts ordered by increasing device shift
-    (in-domain hold-out -> AliveCor -> Holter). The lines cross: the deep model
-    leads in-domain but falls below the device-agnostic model off-device, so
-    in-domain accuracy ranks the two candidates in an order that deployment
-    reverses. External points carry patient/record-clustered bootstrap 95% CIs.
+    Left panel: the in-domain hold-out, where the deep model holds a small,
+    reproducible advantage. Right panel: every external cohort, showing that the
+    deep model's AUC swings far more widely than the device-agnostic model's and
+    that the ordering between them changes from cohort to cohort — including
+    between two cohorts of the same device class. Spread (SD) is annotated
+    because the spread, not the mean, is the paper's claim.
 
-    Apple Watch is deliberately excluded: with a single confirmed positive its
-    AUC is a plausibility check, not a discrimination estimate.
+    External points carry patient/record-clustered bootstrap 95% CIs. Apple Watch
+    is drawn with a hatched marker: one confirmed positive, plausibility only.
     """
     from sklearn.metrics import roc_auc_score
 
     labels = np.array(paired.get("labels", []), dtype=int)
     probs = paired.get("probabilities", {})
     if labels.size == 0 or "rr_rf" not in probs or "cnn_cpsc" not in probs:
-        print("SKIP inversion: in-domain rr_rf / cnn_cpsc scores unavailable")
+        print("SKIP variability: in-domain rr_rf / cnn_cpsc scores unavailable")
         return False
 
     def _valid(v):
         return v is not None and v == v
 
-    # In-domain anchor, then external cohorts by increasing device shift.
-    xs = ["CPSC hold-out\n(in-domain)"]
-    rr = [(float(roc_auc_score(labels, probs["rr_rf"])), None, None)]
-    cnn = [(float(roc_auc_score(labels, probs["cnn_cpsc"])), None, None)]
+    in_rr = float(roc_auc_score(labels, probs["rr_rf"]))
+    in_cnn = float(roc_auc_score(labels, probs["cnn_cpsc"]))
 
+    # External cohorts, ordered as in the paper's table.
+    order = (("apple_watch", "Apple Watch\n(consumer)", True),
+             ("afdb", "MIT-BIH\n(Holter)", False),
+             ("cinc2017", "CinC 2017\n(AliveCor)", False),
+             ("ltafdb", "Long-Term AF\n(Holter)", False))
     cohorts = cd.get("cohorts", {})
-    for key, pretty in (("cinc2017", "CinC 2017\n(AliveCor)"),
-                        ("ltafdb", "Long-Term AF\n(Holter)"),
-                        ("afdb", "MIT-BIH\n(Holter)")):
+    xs, rr, cnn, weak = [], [], [], []
+    for key, pretty, is_weak in order:
         c = cohorts.get(key)
         if not c:
             continue
@@ -356,17 +359,15 @@ def fig_inversion(paired: dict[str, Any], cd: dict[str, Any], out_dir: Path) -> 
         if not (_valid(a.get("auc")) and _valid(b.get("auc"))):
             continue
         xs.append(pretty)
+        weak.append(is_weak)
         for entry, bucket in ((a, rr), (b, cnn)):
             lo, hi = (entry.get("cluster_bootstrap_ci") or [None, None])
-            bucket.append((entry["auc"],
-                           lo if _valid(lo) else None,
+            bucket.append((entry["auc"], lo if _valid(lo) else None,
                            hi if _valid(hi) else None))
 
-    if len(xs) < 2:
-        print("SKIP inversion: need at least one external cohort with both models")
+    if not xs:
+        print("SKIP variability: no external cohort has both models scored")
         return False
-
-    x = np.arange(len(xs))
 
     def _series(vals):
         y = np.array([v[0] for v in vals], dtype=float)
@@ -376,45 +377,62 @@ def fig_inversion(paired: dict[str, Any], cd: dict[str, Any], out_dir: Path) -> 
 
     rr_y, rr_e = _series(rr)
     cnn_y, cnn_e = _series(cnn)
+    x = np.arange(len(xs))
 
-    fig, ax = plt.subplots(figsize=(max(7, 2.6 * len(xs)), 5.2))
-    ax.errorbar(x, rr_y, yerr=rr_e, marker="o", ms=9, lw=2.5, capsize=5,
-                color=MODEL_COLORS["rr_rf"], ecolor=MODEL_COLORS["rr_rf"],
-                label="RR + RF (device-agnostic)")
-    ax.errorbar(x, cnn_y, yerr=cnn_e, marker="s", ms=9, lw=2.5, capsize=5,
-                color=MODEL_COLORS["cnn_cpsc"], ecolor=MODEL_COLORS["cnn_cpsc"],
-                label="CNN-LSTM (CPSC-trained), zero-shot")
+    fig, (axl, axr) = plt.subplots(
+        1, 2, figsize=(max(9, 2.1 * len(xs) + 3), 5.2),
+        gridspec_kw={"width_ratios": [1, max(2.4, len(xs))]}, sharey=True)
 
-    # Label each point on the side away from the other line, so the annotations
-    # never read as swapped where the two series are close or crossing.
-    for xi, (a, b) in enumerate(zip(rr_y, cnn_y)):
+    # ── Left: in-domain ────────────────────────────────────────────────
+    axl.bar([0], [in_rr], 0.5, color=MODEL_COLORS["rr_rf"])
+    axl.bar([1], [in_cnn], 0.5, color=MODEL_COLORS["cnn_cpsc"])
+    for xi, v in ((0, in_rr), (1, in_cnn)):
+        axl.text(xi, v + 0.012, f"{v:.3f}", ha="center", va="bottom", fontsize=8.5)
+    axl.set_xticks([0, 1])
+    axl.set_xticklabels(["RR + RF", "CNN-LSTM"], fontsize=8.5)
+    axl.set_ylabel("AUC-ROC")
+    axl.set_title("In-domain hold-out\n(deep model modestly ahead)", fontsize=10)
+    axl.set_xlim(-0.6, 1.6)
+
+    # ── Right: external cohorts ────────────────────────────────────────
+    axr.errorbar(x, rr_y, yerr=rr_e, marker="o", ms=9, lw=2.5, capsize=5,
+                 color=MODEL_COLORS["rr_rf"], ecolor=MODEL_COLORS["rr_rf"],
+                 label=f"RR + RF (SD {rr_y.std(ddof=1):.3f})")
+    axr.errorbar(x, cnn_y, yerr=cnn_e, marker="s", ms=9, lw=2.5, capsize=5,
+                 color=MODEL_COLORS["cnn_cpsc"], ecolor=MODEL_COLORS["cnn_cpsc"],
+                 label=f"CNN-LSTM zero-shot (SD {cnn_y.std(ddof=1):.3f})")
+
+    # Shade each model's full range to make the spread difference immediate.
+    for y, colour in ((rr_y, MODEL_COLORS["rr_rf"]),
+                      (cnn_y, MODEL_COLORS["cnn_cpsc"])):
+        axr.axhspan(y.min(), y.max(), color=colour, alpha=0.07, zorder=0)
+
+    for xi, (a, b, is_weak) in enumerate(zip(rr_y, cnn_y, weak)):
         a_up = a >= b
-        ax.annotate(f"{a:.3f}", (xi, a), textcoords="offset points",
-                    xytext=(0, 12 if a_up else -18), ha="center", fontsize=8.5,
-                    color=MODEL_COLORS["rr_rf"])
-        ax.annotate(f"{b:.3f}", (xi, b), textcoords="offset points",
-                    xytext=(0, -18 if a_up else 12), ha="center", fontsize=8.5,
-                    color=MODEL_COLORS["cnn_cpsc"])
+        axr.annotate(f"{a:.3f}", (xi, a), textcoords="offset points",
+                     xytext=(0, 12 if a_up else -18), ha="center", fontsize=8.5,
+                     color=MODEL_COLORS["rr_rf"])
+        axr.annotate(f"{b:.3f}", (xi, b), textcoords="offset points",
+                     xytext=(0, -18 if a_up else 12), ha="center", fontsize=8.5,
+                     color=MODEL_COLORS["cnn_cpsc"])
+        if is_weak:
+            axr.annotate("1 positive\n(plausibility)", (xi, min(a, b)),
+                         textcoords="offset points", xytext=(0, -42),
+                         ha="center", fontsize=7, color="#888780", style="italic")
 
-    # Shade where the ranking flips (deep above -> deep below).
-    lead = np.sign(cnn_y - rr_y)
-    for xi in range(len(x) - 1):
-        if lead[xi] > 0 and lead[xi + 1] < 0:
-            ax.axvspan(xi, xi + 1, color="#FAEEDA", alpha=0.55, zorder=0)
-            ax.text(xi + 0.5, 0.505, "ranking inverts", ha="center", va="bottom",
-                    fontsize=9.5, color="#854F0B", style="italic")
+    axr.axhline(0.5, ls="--", lw=1, color="#B4B2A9", label="chance (0.5)")
+    axr.set_xticks(x)
+    axr.set_xticklabels(xs, fontsize=8.5)
+    axr.set_xlim(-0.45, len(x) - 0.55)
+    axr.set_title("Zero-shot external cohorts — the deep model's AUC swings\n"
+                  "far more widely, and the ordering changes by cohort",
+                  fontsize=10)
+    axr.legend(loc="lower right", fontsize=8.5)
 
-    ax.axhline(0.5, ls="--", lw=1, color="#B4B2A9", label="chance (0.5)")
-    ax.set_xticks(x)
-    ax.set_xticklabels(xs, fontsize=9)
-    ax.set_xlim(-0.35, len(x) - 0.65)
-    ax.set_ylim(0.45, 1.02)
-    ax.set_ylabel("AUC-ROC")
-    ax.set_title("In-domain accuracy does not predict cross-device robustness\n"
-                 "(cohorts ordered by increasing device shift; "
-                 "external points show clustered 95% CIs)", fontsize=11)
-    ax.legend(loc="lower left", fontsize=9)
-    out = out_dir / "rank_inversion.png"
+    axl.set_ylim(0.45, 1.05)
+    fig.suptitle("In-domain accuracy does not predict cross-device variability",
+                 fontsize=12)
+    out = out_dir / "crossdevice_variability.png"
     fig.tight_layout()
     fig.savefig(out, dpi=200, bbox_inches="tight")
     plt.close(fig)

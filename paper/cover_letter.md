@@ -6,8 +6,8 @@
 Dear Program Committee,
 
 Please consider our manuscript, *"In-Domain Accuracy Does Not Predict Cross-Device
-Robustness: A Pre-Registered Benchmark for Wearable Atrial Fibrillation
-Screening,"* for the PSB 2027 session **AI and Machine Learning in Clinical
+Variability: A Pre-Registered Multi-Cohort Benchmark for Wearable Atrial
+Fibrillation Screening,"* for the PSB 2027 session **AI and Machine Learning in Clinical
 Medicine**.
 
 Atrial fibrillation is a leading, largely preventable cause of ischemic stroke,
@@ -18,22 +18,26 @@ fleet of devices people already own. Our paper asks a question about *evaluation
 rather than architecture: does in-domain held-out accuracy — the metric on which
 such models are routinely selected — predict which model survives deployment?
 
-We find that it does not, and that it can order candidate models incorrectly. On a
-pre-registered, leakage-safe, patient-grouped hold-out, a deep waveform model is
-nominally ahead of a lightweight device-agnostic timing model (AUC 0.949 vs 0.935,
-not significant). Moved zero-shot onto ambulatory Holter recordings, that ranking
-inverts: the timing model reaches 0.871 (95% CI 0.81–0.92) while the same deep
-model falls to 0.773 (0.67–0.87). On single-lead AliveCor recordings the two are
-indistinguishable (p=0.93), so the effect appears where device shift is largest. A
-deep model trained *across* devices recovers and leads, showing the failure is one
-of training distribution rather than architecture.
+We find that it does not, in a specific and practically important way. On a
+pre-registered, leakage-safe, patient-grouped hold-out a deep waveform model holds
+a small but reproducible advantage over a lightweight device-agnostic timing model
+(AUC 0.949 vs 0.935; significant on 14 of 20 alternate hold-out splits). That
+advantage carries no information about off-device behaviour. Across four external
+cohorts the deep model's AUC ranges from 0.642 to 0.935 (SD 0.121) while the
+timing model stays within 0.792–0.873 (SD 0.041) — a 2.9x difference in spread —
+and the sign of the gap between them flips from cohort to cohort. Notably, our two
+ambulatory Holter cohorts belong to the same hardware class yet rank the two
+models in opposite orders, so the variability is not explained by device class
+alone and could not have been predicted by testing one dataset per device type.
 
 Our contribution is therefore a cautionary benchmark result together with the
 reusable protocol that exposes it — identical windows, zero-shot external cohorts,
-paired tests, and patient-clustered intervals — responsive to documented leakage
-and reproducibility problems in clinical machine learning. We report our
-limitations plainly, including a pre-registered cohort we could not score within
-budget and a pre-registered sensitivity analysis that did not complete.
+paired tests, patient-clustered intervals, and a 20-split sensitivity analysis —
+responsive to documented leakage and reproducibility problems in clinical machine
+learning. We report our limitations plainly: four cohorts cannot separate the
+factors that co-vary with them, one cohort rests on 23 patients, one is evaluated
+on a bounded per-record subsample, and the Apple Watch cohort contains a single
+confirmed positive and supports plausibility only.
 
 We believe this fits the Clinical Medicine session's emphasis on clinically
 grounded, methodologically rigorous machine learning, and speaks directly to

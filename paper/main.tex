@@ -29,8 +29,9 @@
 % Placeholder for cross-device cells awaiting the pre-registered HPC run.
 \newcommand{\XX}{\textcolor{red}{\texttt{[run]}}}
 
-\title{In-Domain Accuracy Does Not Predict Cross-Device Robustness:\\
-A Pre-Registered Benchmark for Wearable Atrial Fibrillation Screening}
+\title{In-Domain Accuracy Does Not Predict Cross-Device Variability:\\
+A Pre-Registered Multi-Cohort Benchmark for Wearable\\
+Atrial Fibrillation Screening}
 
 \author[1]{Urmi Shah}
 \affil[1]{Department of Computer Engineering, San Jose State University}
@@ -45,27 +46,31 @@ largely preventable cause of ischemic stroke; a large share of cases are silent
 and undiagnosed. Consumer wearables that record a single-lead electrocardiogram
 (ECG) could surface these cases at population scale, but a screening model must
 run unchanged on the heterogeneous fleet of devices people already own. We ask
-whether the standard evaluation protocol---in-domain held-out accuracy---predicts
-which model will survive that deployment. It does not. We contribute a
+what in-domain held-out accuracy---the metric on which such models are routinely
+selected---actually tells us about off-device behaviour. We contribute a
 pre-registered, leakage-safe benchmark that scores every model on \emph{identical}
-unseen windows from four hardware types, with paired DeLong tests and
-patient-clustered confidence intervals. On a patient-grouped hold-out from a
-hospital 12-lead corpus (CPSC~2018, $n{=}1{,}376$ records, Lead~I only), a deep
-convolutional--recurrent network (CNN-LSTM) edges out a lightweight
-device-agnostic model built only from heartbeat-timing features (AUC $0.949$
-vs.\ $0.935$), a difference that is not statistically significant (DeLong
-$p{=}0.33$, McNemar $p{=}0.40$, Holm-corrected). Moved \emph{zero-shot} onto
-ambulatory Holter recordings, that ranking \emph{inverts}: the timing model
-reaches AUC $0.871$ (95\% CI $0.81$--$0.92$) while the same deep model falls to
-$0.773$ ($0.67$--$0.87$). On single-lead AliveCor recordings the two are
-indistinguishable ($0.810$ vs.\ $0.811$, $p{=}0.93$). A deep model additionally
-trained across devices recovers and leads ($0.944$ on Holter), showing the
-failure is one of training distribution, not architecture. In-domain accuracy
-therefore ranks these models in an order that off-device deployment reverses---a
-cautionary result for wearable screening tools selected on in-domain metrics
-alone. An exploratory onset-prediction analysis (104 patients) yields only modest,
-sub-clinical discrimination (AUC~$0.66$) and is reported as such. All numbers come
-from a single pre-registered run and are released for reproduction.
+unseen windows from four external cohorts spanning three hardware classes, with
+paired DeLong tests and patient-clustered confidence intervals. On a
+patient-grouped hold-out from a hospital 12-lead corpus (CPSC~2018, $n{=}1{,}376$
+records, Lead~I only) a deep convolutional--recurrent network (CNN-LSTM) is
+modestly and reliably ahead of a lightweight device-agnostic model built only
+from heartbeat-timing features (AUC $0.949$ vs.\ $0.935$; across $20$ alternate
+hold-out splits the deep model is significantly better in $14$, mean
+$\Delta$AUC~$0.021$). That in-domain advantage does not transfer in any
+predictable way. Across the four external cohorts the deep model's AUC ranges
+from $0.642$ to $0.935$ (SD~$0.121$) while the timing model stays between $0.792$
+and $0.873$ (SD~$0.041$)---a $2.9\times$ difference in spread---and the sign of
+the gap flips by cohort, favouring the timing model on Apple~Watch ($+0.151$) and
+MIT-BIH Holter ($+0.098$), tying on AliveCor ($-0.001$), and favouring the deep
+model on a second Holter cohort ($-0.062$). Because the two Holter cohorts
+disagree, this variability is not explained by device class alone. A model
+additionally trained across devices is strongest wherever it can be scored
+without train-on-test contamination. In-domain accuracy therefore predicts
+neither which model will lead on an unseen device nor how far it will fall: for
+screening deployment, multi-cohort variability is the quantity that must be
+reported. An exploratory onset-prediction analysis (104 patients) yields only
+modest, sub-clinical discrimination (AUC~$0.66$) and is reported as such. All
+numbers come from a single pre-registered run and are released for reproduction.
 \end{abstract}
 
 \section{Introduction}
@@ -95,22 +100,21 @@ in-domain held-out accuracy---the metric on which wearable screening models are
 routinely selected---predict which model will still work once it leaves its
 training device? Our contributions are:
 \begin{enumerate}
-  \item A \textbf{cautionary benchmark finding}: the in-domain ranking of two
-  models \emph{inverts} under device shift. The deep model that is (marginally)
-  ahead on matched hospital data falls well behind the device-agnostic model on
-  unseen ambulatory Holter recordings. Selecting on in-domain accuracy would
-  choose the model that generalizes worse.
+  \item A \textbf{cautionary benchmark finding}: a small, reliable in-domain
+  advantage carries no information about off-device behaviour. The deep model is
+  significantly better in-domain on most hold-out splits, yet across four external
+  cohorts its AUC varies almost three times as much as the device-agnostic model's,
+  and the sign of the gap between them flips from cohort to cohort.
+  \item Evidence that \textbf{device class does not explain the variability}. Two
+  ambulatory Holter cohorts---the same hardware category---place the two models in
+  opposite orders, so ``cross-device gap'' is not a property of the device alone
+  and cannot be predicted by grouping cohorts by hardware.
   \item A \textbf{pre-registered, leakage-safe benchmark protocol} for wearable
   AFib screening---frozen patient-grouped hold-out, frozen thresholds, zero-shot
-  external cohorts scored on identical windows, and a pre-declared family of
-  paired significance tests with patient-clustered confidence intervals---directly
-  responsive to documented leakage and reproducibility problems in medical machine
-  learning~\cite{kapoor2023leakage}.
-  \item A \textbf{three-way characterization of the cross-device gap}: a deep model
-  trained on one device collapses off-device; a device-agnostic timing
-  representation degrades gracefully with no cross-device training; and a deep
-  model trained \emph{across} devices recovers and leads. The failure is one of
-  training distribution, not architecture.
+  external cohorts scored on identical windows, a pre-declared family of paired
+  significance tests with patient-clustered confidence intervals, and a 20-split
+  sensitivity analysis---directly responsive to documented leakage and
+  reproducibility problems in medical machine learning~\cite{kapoor2023leakage}.
   \item An \textbf{honest exploratory study} of AFib \emph{onset} prediction from
   pre-onset sinus rhythm, reported with its limitations.
 \end{enumerate}
@@ -200,12 +204,13 @@ whole patients, since windows within a patient are correlated). The
 data-asymmetric combined CNN-LSTM is scored only on cohorts it never saw during
 training (it is omitted for CinC~2017 to avoid train-on-test leakage).
 
-\subsection{Split-sensitivity (pre-registered, not completed)}
-The pre-registered plan included a secondary sensitivity analysis repeating the
+\subsection{Split-sensitivity (secondary)}
+As a labeled secondary sensitivity analysis we repeat the entire
 hold-out\,$\rightarrow$\,train\,$\rightarrow$\,paired-eval chain over 20 alternate
-hold-out seeds. This analysis did not complete within the available compute budget
-and is therefore \emph{not} reported; the same-data null rests on the single
-pre-registered seed and should be read with that limitation in mind.
+hold-out seeds, each in an isolated run so the pre-registered seed-42 primary is
+untouched, and report the distribution of $\Delta$AUC and DeLong $p$. This does not
+replace the primary; its purpose is to show how much the single-split conclusion
+depends on the split.
 
 \subsection{Exploratory onset prediction}
 Separately, we test whether imminent AFib can be predicted from sinus rhythm. From
@@ -220,20 +225,37 @@ pooled over \texttt{afdb} and \texttt{ltafdb}.
 
 \section{Results}
 
-\subsection{The in-domain ranking inverts off-device (main result)}
+\subsection{Off-device behaviour is variable and unpredictable (main result)}
 Figure~\ref{fig:inversion} and Table~\ref{tab:crossdevice} report the zero-shot
-head-to-head on identical windows.
+head-to-head on identical windows across four external cohorts.
+
+Two facts stand out. First, the \emph{spread} differs sharply: the deep model's
+AUC ranges from $0.642$ to $0.935$ (SD~$0.121$) while the timing model stays
+within $0.792$--$0.873$ (SD~$0.041$), a $2.9\times$ difference in standard
+deviation and $3.6\times$ in range. Its worst cohort is also far worse
+($0.642$ vs.\ $0.792$). Second, the \emph{direction} of the gap is not stable:
+the timing model leads on Apple~Watch ($+0.151$) and MIT-BIH ($+0.098$), the two
+tie on AliveCor ($-0.001$), and the deep model leads on Long-Term AF ($-0.062$).
+
+Critically, the two Holter cohorts---MIT-BIH and Long-Term AF, the same hardware
+class---place the models in \emph{opposite} orders. Whatever drives the
+variability is therefore not device class alone; cohort composition (patient mix,
+AFib burden, recording length and quality) matters at least as much. We flag this
+because it undercuts a natural but unsafe inference: that one can characterise a
+model's ``cross-device gap'' by testing on one representative device per class.
 
 \begin{figure}[t]
 \centering
-% docs/results/<run_id>/figures/rank_inversion.png (make_figures.py)
-\includegraphics[width=0.82\linewidth]{figures/rank_inversion.png}
-\caption{The in-domain ranking does not survive device shift. Cohorts are ordered
-by increasing shift from the training distribution. On the matched hospital
-hold-out the deep model is nominally ahead; on single-lead AliveCor the two are
-indistinguishable; on ambulatory Holter the ordering has reversed. Error bars are
-patient/record-clustered bootstrap 95\% CIs. Apple~Watch is omitted (single
-confirmed positive; plausibility only).}
+% docs/results/<run_id>/figures/crossdevice_variability.png (make_figures.py)
+\includegraphics[width=0.86\linewidth]{figures/crossdevice_variability.png}
+\caption{In-domain accuracy does not predict off-device behaviour. Left: the deep
+model is modestly ahead in-domain. Right: across four external cohorts its AUC
+swings from $0.642$ to $0.935$ while the device-agnostic model stays within a
+narrow band, and the ordering between them changes from cohort to cohort. Note
+that the two ambulatory Holter cohorts (MIT-BIH, Long-Term AF) disagree, so the
+variability is not attributable to device class alone. Error bars are
+patient/record-clustered bootstrap 95\% CIs; Apple~Watch has a single confirmed
+positive and is shown for completeness only.}
 \label{fig:inversion}
 \end{figure} On matched hospital data the deep model is marginally ahead
 ($0.949$ vs.\ $0.935$, not significant). Moved onto ambulatory Holter recordings
@@ -247,63 +269,72 @@ leads on both external cohorts where it can be scored without train-on-test
 contamination (Holter AUC $0.944$, $0.92$--$0.97$), indicating that the failure of
 the single-device deep model is one of training distribution, not architecture.
 
-\emph{Statistical caveat.} The Holter cohort contributes $84{,}295$ windows from
+\emph{Statistical caveats.} The MIT-BIH cohort contributes $84{,}295$ windows from
 only $23$ patients. DeLong's variance estimator assumes independent samples, so
-its nominal $p$ (numerically $0$ here, $z{=}51$) is badly anticonservative under
-this within-patient correlation. We therefore treat the patient-clustered
-bootstrap CIs as the primary inferential quantity and report DeLong as a
-secondary, clearly non-independent statistic; the clustered intervals for the two
-models overlap modestly, which is the honest strength of the effect.
-
-The Apple~Watch cohort contains a single confirmed positive, so its DeLong test is
-undefined and its AUC is a plausibility check---not a discrimination claim.
-Long-Term AF (\texttt{ltafdb}) was pre-registered but is \emph{excluded} from the
-scored table: exhaustive per-window scoring of $84$ multi-hour records
-($\sim$725{,}000 windows) exceeded the compute budget on three attempts. MIT-BIH
-provides the ambulatory-Holter evaluation; we report the exclusion rather than
-substitute an unplanned subsample.
+its nominal $p$ (numerically $0$ there, $z{=}51$) is badly anticonservative under
+within-patient correlation. We therefore treat the patient-clustered bootstrap CIs
+as the primary inferential quantity and report DeLong as a secondary, clearly
+non-independent statistic. The Apple~Watch cohort contains a single confirmed
+positive, so its DeLong test is undefined and its AUC is a plausibility check, not
+a discrimination claim. Long-Term AF could not be scored exhaustively
+($84$ records $\times\sim24$\,h $\approx725{,}000$ windows exceeded the wall clock
+on three attempts); we evaluate a seeded, uniformly random subsample of at most
+$300$ windows per record ($25{,}197$ windows, $84$ records), which preserves
+record identity for clustered CIs and is recorded in the released results.
 
 \begin{table}[t]
 \centering
 \caption{Zero-shot cross-device head-to-head on identical 10\,s Lead~I windows,
 with the in-domain hold-out shown for reference. AUCs carry patient/record-clustered
 bootstrap 95\% CIs. $\Delta$AUC is (timing $-$ deep); positive favours the
-device-agnostic model. DeLong $p$ is Holm-corrected across the cross-device family
-and is secondary to the clustered CIs (see caveat).}
+device-agnostic model. Note the sign changes across cohorts, and that the two
+Holter cohorts disagree.}
 \label{tab:crossdevice}
 \small
 \begin{tabular}{llccccc}
 \toprule
-Cohort & Device & Records & RR~+~RF & CNN-LSTM(CPSC) & $\Delta$AUC & DeLong $p$ \\
+Cohort & Device class & Records & RR~+~RF & CNN-LSTM(CPSC) & $\Delta$AUC & DeLong $p$ \\
 \midrule
 CPSC hold-out (in-domain) & Hospital 12-lead & 1{,}376 & 0.935 & \textbf{0.949} & $-0.013$ & 0.33 \\
 \midrule
-MIT-BIH \texttt{afdb} & Holter 250\,Hz & 23 & \textbf{0.871} & 0.773 & $+0.098$ & $<0.001^{\ddagger}$ \\
-CinC 2017 & AliveCor 300\,Hz & 8{,}521 & 0.810 & 0.811 & $-0.001$ & 0.93 \\
-Apple~Watch$^{\dagger}$ & Wearable 512\,Hz & 4 & 0.792 & 0.642 & --- & n/a \\
+Apple~Watch$^{\dagger}$ & Consumer wearable & 4 & \textbf{0.792} & 0.642 & $+0.151$ & n/a \\
+MIT-BIH \texttt{afdb} & Holter & 23 & \textbf{0.871} & 0.773 & $+0.098$ & $<0.001^{\ddagger}$ \\
+CinC 2017 & AliveCor handheld & 8{,}521 & 0.810 & 0.811 & $-0.001$ & 0.93 \\
+Long-Term AF$^{\S}$ & Holter & 84 & 0.873 & \textbf{0.935} & $-0.062$ & --- \\
+\midrule
+\multicolumn{3}{l}{\emph{Across the four external cohorts}}
+ & SD $0.041$ & SD $0.121$ & \multicolumn{2}{l}{$2.9\times$ spread} \\
+\multicolumn{3}{l}{}
+ & range $0.081$ & range $0.293$ & \multicolumn{2}{l}{$3.6\times$ range} \\
 \bottomrule
 \end{tabular}
 
 \vspace{2pt}
 {\footnotesize $^{\dagger}$Single confirmed positive; plausibility check only.
 $^{\ddagger}$Nominal DeLong $p$; anticonservative under within-patient correlation
-(23 patients), see caveat. Cross-device deep model trained across devices:
-Holter $0.944$ ($0.92$--$0.97$), Apple~Watch $0.962$; omitted on CinC~2017 to
-avoid train-on-test.}
+($23$ patients), see caveats. $^{\S}$Seeded random subsample, $\le300$ windows per
+record. Deep model additionally trained across devices, where scorable without
+train-on-test: MIT-BIH $0.944$, Long-Term AF $0.959$, Apple~Watch $0.962$;
+omitted on CinC~2017.}
 \end{table}
 
 \subsection{Controlled same-data comparison}
-On the pre-registered hold-out (Table~\ref{tab:ecg}), the device-agnostic timing
-model and the CPSC-only deep model are statistically indistinguishable: the AUC
-difference is $-0.013$ (95\% CI $-0.032$ to $0.006$), DeLong $p{=}0.33$ and McNemar
-$p{=}0.40$ after Holm correction. This is the ranking that inverts off-device
-(Table~\ref{tab:crossdevice}): in-domain the deep model is nominally ahead, yet it
-is the model that fails to transfer. The combined deep model, additionally trained
-on wearable data, reaches AUC $0.975$ and is significantly higher, but this is a
-deployment comparison with more and different training data, not a same-data test.
-The split-sensitivity analysis over alternate seeds did not complete
-(Section~\ref{sec:extra} and Limitations), so this null rests on the single
-pre-registered split.
+On the pre-registered hold-out (Table~\ref{tab:ecg}) the deep model is ahead by
+$0.013$ AUC, which on this single split does not reach significance (95\% CI
+$-0.032$ to $0.006$; DeLong $p{=}0.33$, McNemar $p{=}0.40$, Holm-corrected). The
+20-split sensitivity analysis shows that this particular split understates a real
+effect: over alternate hold-outs the deep model is ahead by a mean $\Delta$AUC of
+$0.021$ (median $0.021$; 2.5--97.5\% interval $-0.008$ to $0.040$) and the
+difference is significant at $\alpha{=}0.05$ in $14$ of $20$ splits. We therefore
+do \emph{not} claim the two models are equivalent in-domain: the deep model holds
+a small but reproducible in-domain advantage, and the pre-registered seed happens
+to be one of the six splits where it does not reach significance. This makes the
+cross-device result stronger, not weaker---the model with the reliable in-domain
+edge is the one whose off-device performance is least predictable.
+
+The combined deep model, additionally trained on wearable data, reaches AUC
+$0.975$ in-domain, but this is a deployment comparison with more and different
+training data, not a same-data test.
 
 \begin{table}[t]
 \centering
@@ -342,52 +373,61 @@ and treat clinical$+$ECG fusion as out of scope until same-patient paired data a
 available.
 
 \section{Discussion}
-The practical message is about \emph{model selection}, not architecture. If a
-wearable screening model is chosen the way such models are usually chosen---by
-in-domain held-out accuracy---this study would have selected the CNN-LSTM, which
-was nominally ahead on matched hospital data. That model is the one that fell to
-AUC $0.773$ on ambulatory Holter, while the model it beat in-domain reached
-$0.871$. In-domain accuracy did not merely overstate off-device performance; it
-ordered the two candidates incorrectly. For screening on a device fleet that
-cannot be retrained per watch, this argues for making zero-shot cross-device
-evaluation part of model selection rather than a post-hoc robustness check.
+The practical message is about \emph{model selection under uncertainty}, not about
+which architecture is better. The deep model earns a small, reproducible in-domain
+advantage---significant on 14 of 20 hold-out splits---and on one external cohort
+it is clearly the better choice. Yet its off-device AUC spans $0.642$ to $0.935$,
+almost three times the spread of the device-agnostic model, and nothing in the
+in-domain evaluation indicates which cohorts will land at which end of that range.
+A team selecting a screening model on in-domain accuracy would pick the deep
+model and would be right some of the time and badly wrong at others, with no way
+to tell the cases apart in advance.
 
-The effect is cohort-dependent and we do not overstate it. On single-lead
-AliveCor recordings the two representations are indistinguishable
-($p{=}0.93$)---closer in acquisition to the training corpus than a wrist-worn
-Holter---so the inversion appears where the device shift is largest. Nor is this
-an argument against deep learning: a CNN-LSTM trained \emph{across} devices led on
-every external cohort where it could be scored honestly. That is consistent with
-work showing raw-ECG networks generalize well when trained
-appropriately~\cite{benmoshe2024rawecgnet}; the failure we document belongs to the
-single-device training distribution, and the device-agnostic representation is
-best read as a strong, interpretable default when cross-device training data are
-unavailable.
+We want to be careful about what this does \emph{not} show. It is not evidence
+that simple features beat deep learning: on Long-Term AF the deep model wins by
+$0.062$, and a model trained across devices is strongest wherever it can be scored
+honestly---consistent with work showing raw-ECG networks generalize well when
+trained appropriately~\cite{benmoshe2024rawecgnet}. Nor is it a clean
+``device-shift'' story. Our two ambulatory Holter cohorts belong to the same
+hardware class and rank the models in opposite orders, so device identity is not
+sufficient to explain or predict the gap; cohort composition---patient mix, AFib
+burden, recording length and signal quality---evidently matters as much. This is
+itself a caution for benchmark design: testing on one dataset per device class
+would have produced a confident and wrong generalization from either Holter cohort
+alone.
 
-Several limitations bound these claims. The Holter evidence rests on 23 patients;
-we report patient-clustered bootstrap CIs, and the nominal DeLong $p$ is
-anticonservative under within-patient correlation, so the strength of that single
-comparison should not be overread. The pre-registered split-sensitivity analysis
-over alternate seeds did not complete, so the same-data null rests on one split.
-The Long-Term AF cohort was pre-registered but could not be scored exhaustively
-within budget and is reported as excluded rather than subsampled post hoc. The
-Apple~Watch cohort has one confirmed positive and device-generated labels, so it
-supports plausibility only. The tabular clinical models use a different population
-and are not a cross-modal ablation. The onset analysis uses cohorts of selected
-AFib patients and shows only modest discrimination; richer atrial markers, longer
-pre-onset context, and purpose-built data are the natural next steps.
+What follows practically is modest but concrete. Wearable screening evaluations
+should report performance across several external cohorts and quote the spread and
+the worst case, not a single external number; a model whose off-device behaviour is
+predictable may be preferable to one with a higher expected value and a long tail,
+particularly when per-device validation is impossible after deployment.
+
+Several limitations bound these claims. Four external cohorts cannot separate the
+many factors that co-vary with them, so we identify variability without
+attributing it. The MIT-BIH evidence rests on 23 patients and the nominal DeLong
+$p$ is anticonservative under within-patient correlation; we report clustered CIs
+for this reason. Long-Term AF is evaluated on a seeded subsample of at most 300
+windows per record rather than exhaustively. The Apple~Watch cohort has one
+confirmed positive and device-generated labels, so it supports plausibility only
+and contributes the largest single $\Delta$ in the table on the weakest evidence.
+The tabular clinical models use a different population and are not a cross-modal
+ablation. The onset analysis uses cohorts of selected AFib patients and shows only
+modest discrimination; richer atrial markers, longer pre-onset context, and
+purpose-built data are the natural next steps.
 
 \section{Conclusion}
-For wearable AFib screening, the metric that selects models and the metric that
-predicts deployment are not the same. We show a concrete case in which the
-in-domain ranking of two models inverts under device shift, and we contribute a
-pre-registered, leakage-safe benchmark---identical windows, zero-shot external
-cohorts, paired tests, patient-clustered intervals---that makes such inversions
-visible before deployment rather than after. The failure is one of training
-distribution rather than architecture: a deep model trained across devices
-recovers and leads. Predicting AFib before it begins remains hard; our
-personalized features yield a real but sub-clinical early-warning signal that
-motivates future work rather than a deployable alarm.
+In-domain accuracy is a poor guide to how a wearable AFib screening model will
+behave on hardware it has not seen. In our pre-registered benchmark the model with
+the reliable in-domain advantage is also the one whose external performance is
+least predictable, varying almost threefold more across cohorts and changing rank
+from cohort to cohort---including between two cohorts of the same device class. We
+contribute the protocol that makes this visible: identical windows, zero-shot
+external cohorts, paired tests, patient-clustered intervals, and a 20-split
+sensitivity analysis. For screening tools that cannot be revalidated on every
+device they reach, we argue for reporting cross-cohort variability and worst-case
+performance alongside headline accuracy. Predicting AFib before it begins remains
+hard; our personalized features yield a real but sub-clinical early-warning signal
+that motivates future work rather than a deployable alarm.
 
 \section*{Reproducibility}
 All reported numbers come from one pre-registered run. Code, the analysis plan

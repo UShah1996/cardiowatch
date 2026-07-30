@@ -15,14 +15,20 @@ Oct 1, 2026. Publisher: World Scientific; proceedings indexed in PubMed.
       secondary with a non-independence caveat (23 patients / 84,295 windows).
 - [x] **ltafdb** declared pre-registered-but-excluded (compute budget), not
       silently subsampled.
-- [x] **Seed-robustness claim removed** — job 16 never completed; declared as not run.
+- [x] **Seed robustness completed** (20 splits): deep model significantly better in
+      14/20, mean ΔAUC 0.021. The seed-42 non-significant result is a minority
+      outcome — paper now says so explicitly instead of claiming equivalence.
+- [x] **LTAFDB recovered** via bounded per-record subsample (300/record, 25,197
+      windows, 84 records). It does NOT replicate the MIT-BIH ordering — the deep
+      model wins there (0.935 vs 0.873). Paper reframed around cross-cohort
+      *variability* rather than a rank inversion.
 - [ ] **Consistency gate:** re-read `main.tex` against `paper_tables.md`,
       `stat_tests.json`, `crossdevice_stats.json`. README, paper, results agree.
 - [ ] Insert figures from `docs/results/<run_id>/figures/`; consider adding a
       cross-device **inversion figure** (in-domain vs Holter AUC, lines crossing) —
       it is the paper's single most persuasive visual.
-- [ ] *(Optional strengthener)* Re-run job 16 (seed sensitivity) if compute frees
-      up; it would materially firm up the 23-patient Holter result.
+- [ ] *(Optional)* More external cohorts would help separate device class from
+      cohort composition — the current 4 cannot.
 
 ## Before submission — format (World Scientific ws-procs)
 - [x] `paper/main_wsprocs.tex` created (body identical to `main.tex` apart from
