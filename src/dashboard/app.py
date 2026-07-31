@@ -515,8 +515,10 @@ if 'Combined' in cnn_label or 'CV' in cnn_label:
         f"Loaded: {cnn_label}. Combined-data *deployment* model "
         "(CPSC 2018 + PhysioNet 2017) — higher because it trains on more, "
         "heterogeneous data, not a same-data comparison. On the same hold-out the "
-        "device-agnostic RR+RF model scores AUC 0.935 — statistically "
-        "indistinguishable from the CPSC-only CNN-LSTM (0.949; DeLong p=0.33)."
+        "device-agnostic RR+RF model scores AUC 0.935 vs 0.949 for the CPSC-only "
+        "CNN-LSTM (p=0.33 on this split, but the deep model is significantly ahead "
+        "on 14/20 splits). Off-device the ordering is not stable: RR+RF leads on "
+        "Apple Watch and MIT-BIH, ties on AliveCor, and trails on Long-Term AF."
     )
     aw_note = "exploratory: 0.91 (CI 0.80–0.96)"
 else:
