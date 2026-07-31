@@ -389,9 +389,12 @@ mlflow ui   # open localhost:5000
   Bootstrap transitions should be used for the paper-ready median/IQR latency result.
 - ![Detection-latency tradeoff](docs/lead_time_tradeoff.png)
 
-#### Domain Gap Discovery
-- CNN-LSTM (CPSC-only) tested on 6 Apple Watch recordings → all scores ~0.50 (random chance)
-- Root cause: model learned hospital ECG waveform patterns, not device-agnostic cardiac patterns
+#### Domain Gap Discovery (historical — superseded)
+- An early, informal check on 6 Apple Watch recordings suggested the CPSC-only
+  CNN-LSTM scored ~0.50 (chance).
+- **Superseded:** under the pre-registered protocol (identical windows, all 54
+  recordings) it scores **AUC 0.642** — degraded, but not chance. See the
+  four-cohort table in Key Results for the measured values.
 
 #### Solution 1 — RR Traditional ML
 - Device-agnostic RR interval features (CV, RMSSD, pNN50, MAD, IQR, entropy)
@@ -415,7 +418,7 @@ classifier, not clinical adjudication.
 
 | Model | Apple Watch (exploratory) | Notes |
 |---|---|---|
-| CNN-LSTM (CPSC only) | ~0.50 ❌ | Domain gap — random chance |
+| CNN-LSTM (CPSC only) | AUC 0.642 | degraded off-device (pre-registered protocol) |
 | RR + RF (device-agnostic) | 49/54, acc 0.91 (95% CI 0.80–0.96) | timing features, no retraining |
 | CNN-LSTM (combined) | acc 0.91 (95% CI 0.80–0.96) | deployment model |
 
