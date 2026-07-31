@@ -1,5 +1,5 @@
 # 🫀 CardioWatch
-### Early Detection & Short-Term Risk Prediction of Atrial Fibrillation Using ECG and Clinical Data
+### Device-Agnostic Atrial Fibrillation Screening from Single-Lead Wearable ECG
 
 ![Python](https://img.shields.io/badge/Python-3.9-blue)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.3-orange)
@@ -25,19 +25,33 @@ The ECG component is built around **AFib detection using Lead I only** — the s
 
 All numbers below come from the **pre-registered, leakage-safe** run in
 `docs/results/<run_id>/` (patient-grouped CPSC hold-out, $n{=}1{,}376$, Lead I).
-The headline is the **controlled comparison**: a device-agnostic timing model is
-statistically indistinguishable from a deep model on matched data.
+The headline is that **in-domain accuracy does not predict off-device behaviour**:
+the deep model holds a small, reproducible in-domain edge, yet across four external
+cohorts its AUC varies ~3× as much as the device-agnostic model's, and which model
+leads changes from cohort to cohort.
 
 | Model | Input | AUC (hold-out) | Notes |
 |---|---|---|---|
 | RR + RF (device-agnostic) | ECG Lead I | **0.935** | timing features only |
-| CNN-LSTM (CPSC only) | ECG Lead I | **0.949** | vs RR: ΔAUC −0.013, **DeLong p = 0.33 (n.s.)** |
+| CNN-LSTM (CPSC only) | ECG Lead I | **0.949** | ΔAUC −0.013 (p=0.33 on this split; significant on **14/20** seeds) |
 | CNN-LSTM (combined) | ECG Lead I | 0.975 | data-asymmetric *deployment* model (adds PhysioNet 2017) |
 | Random baseline | ECG Lead I | 0.502 | sanity floor |
 | Random Forest (clinical) | Clinical (separate cohort) | 0.954 | distinct population — not fused |
 | XGBoost (clinical) | Clinical (separate cohort) | 0.927 | threshold via F-β (β=2) |
 
-**Cross-device (device-agnostic RR + RF, zero-shot):** MIT-BIH Holter AUC **0.907**;
+**Cross-device, zero-shot (identical windows, 4 cohorts):**
+
+| Cohort | Device class | RR + RF | CNN-LSTM (CPSC) | Δ (RR − CNN) |
+|---|---|---|---|---|
+| Apple Watch* | consumer | **0.792** | 0.642 | +0.151 |
+| MIT-BIH | Holter | **0.871** | 0.773 | +0.098 |
+| CinC 2017 | AliveCor | 0.810 | 0.811 | −0.001 |
+| Long-Term AF | Holter | 0.873 | **0.935** | −0.062 |
+| **spread** | | **SD 0.041** | **SD 0.121** | 2.9× |
+
+\* one confirmed positive — plausibility only. The two Holter cohorts disagree, so
+device class alone does not explain the variability.
+
 Apple Watch accuracy **0.91 (95% CI 0.80–0.96)** — *exploratory* (54 recordings,
 one confirmed AFib, device-classifier labels).
 
@@ -50,15 +64,25 @@ one confirmed AFib, device-classifier labels).
 
 ---
 
-## 🔑 Key Finding — Domain Gap
+## 🔑 Key Finding — Off-Device Performance Is Unpredictable
 
-A CNN-LSTM trained only on hospital ECGs (CPSC 2018, 500 Hz) drops to **~0.50 (random chance)** on Apple Watch recordings. Root cause: the model learns device-specific waveform patterns, not device-agnostic cardiac patterns.
+A CNN-LSTM trained only on hospital ECGs (CPSC 2018, 500 Hz) scores **0.949** on the
+in-domain hold-out but **0.642** on Apple Watch and **0.773** on MIT-BIH Holter — while
+*gaining* on Long-Term AF (**0.935**). Its off-device AUC spans 0.29; the device-agnostic
+model's spans 0.08. Nothing in the in-domain evaluation indicates which cohorts land where.
+
+> An earlier informal evaluation reported "~0.50 (chance)" on Apple Watch. The
+> pre-registered protocol measures **0.642** on identical windows; the earlier figure
+> is superseded.
 
 **Two solutions implemented:**
-- **RR + RF (device-agnostic):** timing features only. Pre-registered CPSC hold-out AUC **0.935** (indistinguishable from the deep model, DeLong p=0.33); zero-shot MIT-BIH Holter AUC **0.907**; Apple Watch **49/54** (exploratory). Transfers across devices with no retraining.
+- **RR + RF (device-agnostic):** timing features only. Pre-registered CPSC hold-out AUC **0.935**; zero-shot MIT-BIH Holter **0.871**, AliveCor **0.810**, Long-Term AF **0.873**, Apple Watch **0.792** (exploratory). Notably *stable* across devices (SD 0.041) without retraining — though not uniformly better than the deep model (it loses on Long-Term AF).
 - **CNN-LSTM combined:** trained on CPSC 2018 + PhysioNet 2017 (AliveCor wearable). CPSC hold-out AUC **0.975** — a data-asymmetric *deployment* model (more, heterogeneous training data), not a same-data comparison.
 
-Consistent with Bahrami Rad et al. (2024): device-agnostic features generalize across platforms; deep learning features do not without cross-device training.
+Partly consistent with Bahrami Rad et al. (2024): timing features transfer stably
+across platforms. But our Long-Term AF cohort shows the single-device deep model
+can also win off-device, so "simple always generalizes better" is **not** supported —
+the defensible claim is that its off-device performance is far less predictable.
 
 ---
 
@@ -418,10 +442,12 @@ test split (separate cohort).
 | Recall | 0.803 | 0.959 | 0.918 | 0.941 | 0.961 |
 | F1 | 0.679 | 0.701 | 0.837 | 0.914 | 0.852 |
 
-Primary controlled comparison: RR + RF vs CNN-LSTM (CPSC), ΔAUC −0.013, **DeLong
-p = 0.33, McNemar p = 0.40 (Holm)** — not significant. Cross-device (RR, zero-shot):
-MIT-BIH AUC 0.907. Detection latency: near-instant once AFib present (not a
-lead-time claim). Onset prediction (exploratory): pooled AUC ≈ 0.66.
+Primary controlled comparison: RR + RF vs CNN-LSTM (CPSC), ΔAUC −0.013 (DeLong
+p = 0.33, McNemar p = 0.40, Holm) on the pre-registered split — but the 20-split
+sweep shows the deep model significantly ahead in **14/20** (mean ΔAUC 0.021), so
+this is *not* an equivalence claim. Cross-device: see the four-cohort table above.
+Detection latency: near-instant once AFib present (not a lead-time claim). Onset
+prediction (exploratory): pooled AUC ≈ 0.66.
 
 ---
 
